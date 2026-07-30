@@ -83,6 +83,64 @@ class App(tk.Tk):
             '· 기존 수료조회, 대시보드, 변경로그 유지'
         )
 
+    def show_help(self):
+        messagebox.showinfo(
+            'ZeroCool AI 도움말',
+            '1. 조회할 Excel 파일을 선택합니다.\n'
+            '2. 지역, 상태, 조회 항목을 선택합니다.\n'
+            '3. 선택 조건으로 조회 또는 오늘 업무를 실행합니다.\n'
+            '4. 실시간 로그와 조회 결과 탭에서 진행 상황을 확인합니다.\n\n'
+            '추가 기능과 재조회 도구는 설정 메뉴에서 사용할 수 있습니다.'
+        )
+
+    def show_dashboard(self):
+        if hasattr(self, 'main_tabs'):
+            self.main_tabs.select(self.log_frame)
+
+    def focus_query_controls(self):
+        if hasattr(self, 'file_entry'):
+            self.file_entry.focus_set()
+        self.update_target_preview()
+
+    def show_results_view(self):
+        if hasattr(self, 'main_tabs'):
+            self.main_tabs.select(self.result_frame)
+        self.render_rows()
+
+    def show_log_view(self):
+        if hasattr(self, 'main_tabs'):
+            self.main_tabs.select(self.log_frame)
+        if hasattr(self, 'log'):
+            self.log.focus_set()
+
+    def save_log(self):
+        content=self.log.get('1.0','end-1c').strip() if hasattr(self,'log') else ''
+        if not content:
+            return messagebox.showinfo('로그 저장','저장할 로그가 없습니다.')
+        initial=f"zerocool_log_{datetime.now():%Y%m%d_%H%M%S}.txt"
+        path=filedialog.asksaveasfilename(
+            title='실시간 로그 저장',
+            defaultextension='.txt',
+            initialfile=initial,
+            filetypes=[('텍스트 파일','*.txt'),('모든 파일','*.*')],
+        )
+        if path:
+            Path(path).write_text(content,encoding='utf-8')
+            messagebox.showinfo('로그 저장',f'로그를 저장했습니다.\n{path}')
+
+    def clear_log(self):
+        if not hasattr(self,'log') or not self.log.get('1.0','end-1c').strip():
+            return
+        if messagebox.askyesno('로그 지우기','현재 실시간 로그를 모두 지울까요?'):
+            self.log.delete('1.0','end')
+
+    def request_exit(self):
+        if self.proc and not messagebox.askyesno(
+            '프로그램 종료','조회가 진행 중입니다. 그래도 종료할까요?'
+        ):
+            return
+        self.destroy()
+
     def pick(self):
         p=filedialog.askopenfilename(filetypes=[('Excel 파일','*.xls *.xlsx')])
         if p:self.file.set(p);self.refresh_file()
@@ -420,7 +478,10 @@ class App(tk.Tk):
         txt=tk.Text(win,font=('맑은 고딕',10),padx=16,pady=16,wrap='word'); txt.pack(fill='both',expand=True)
         txt.insert('1.0','\n'.join(lines)); txt.configure(state='disabled')
 
-    def _log(self,s):self.log.insert('end',s+'\n');self.log.see('end')
+    def _log(self,s):
+        self.log.insert('end',s+'\n')
+        if not hasattr(self,'auto_scroll') or self.auto_scroll.get():
+            self.log.see('end')
     def stop(self):
         if not self.proc:
             return messagebox.showinfo('조회 중지','현재 진행 중인 조회가 없습니다.')
