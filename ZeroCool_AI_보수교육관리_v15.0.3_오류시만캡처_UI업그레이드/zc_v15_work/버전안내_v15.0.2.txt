@@ -1,0 +1,7 @@
+ZeroCool AI 보수교육관리 v15.0.2
+
+- 서울 edu.tredu.kr 접속 시간초과가 나도 main 프레임 메뉴 클릭을 계속 진행
+- 교육 예약확인 및 변경 버튼은 클릭 후 신상정보 화면 전환이 확인되어야만 성공 처리
+- 일반 클릭, ActionChains, JavaScript, onclick, href 순차 재시도
+- 예약조회는 수료조회 결과를 변경하지 않음
+- 빈 문자열 저장 시 pandas float64 형식 오류 방지
