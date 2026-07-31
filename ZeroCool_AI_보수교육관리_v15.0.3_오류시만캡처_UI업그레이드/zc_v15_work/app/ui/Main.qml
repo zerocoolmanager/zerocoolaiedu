@@ -387,12 +387,13 @@ ApplicationWindow {
                     border.width: 1
 
                     ScrollView {
+                        id: conditionScroll
                         anchors.fill: parent
                         anchors.margins: window.panelPadding
                         clip: true
                         ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
                         Column {
-                            width: parent.width
+                            width: conditionScroll.availableWidth
                             spacing: window.small ? 8 : (window.compact ? 10 : 13)
                             Text {
                                 text: "조회 조건 설정"
