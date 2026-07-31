@@ -67,6 +67,12 @@ def apply_windows_chrome(app):
         ctypes.windll.dwmapi.DwmSetWindowAttribute(
             hwnd, 33, ctypes.byref(corner), ctypes.sizeof(corner)
         )
+        # Windows 11 main-window Mica backdrop. Unsupported builds simply
+        # ignore the attribute and retain the normal light title bar.
+        backdrop = ctypes.c_int(2)
+        ctypes.windll.dwmapi.DwmSetWindowAttribute(
+            hwnd, 38, ctypes.byref(backdrop), ctypes.sizeof(backdrop)
+        )
     except Exception:
         pass
 
@@ -217,9 +223,15 @@ class CheckChoice(tk.Canvas):
     """Rounded Windows-style checkbox with a vector check mark."""
     def __init__(self, master, text, variable, command=None, width=82):
         super().__init__(master, height=32, width=width, bg=SURFACE,
-                         highlightthickness=0, bd=0, cursor="hand2")
+                         highlightthickness=0, bd=0, cursor="hand2",
+                         takefocus=True)
         self.label, self.variable, self.command = text, variable, command
+        self.focused = False
         self.bind("<Button-1>", self._toggle)
+        self.bind("<space>", self._toggle)
+        self.bind("<Return>", self._toggle)
+        self.bind("<FocusIn>", lambda _e: self._focus(True))
+        self.bind("<FocusOut>", lambda _e: self._focus(False))
         self.bind("<Configure>", lambda _e: self.draw())
         variable.trace_add("write", lambda *_a: self.draw())
         self.draw()
@@ -229,11 +241,16 @@ class CheckChoice(tk.Canvas):
         if self.command:
             self.command()
 
+    def _focus(self, value):
+        self.focused = value
+        self.draw()
+
     def draw(self):
         self.delete("all")
         selected = bool(self.variable.get())
         _rounded(self, 2, 7, 20, 25, 5, fill=BLUE if selected else "#f8fafc",
-                 outline=BLUE if selected else "#c8d2df")
+                 outline=BLUE if selected or self.focused else "#c8d2df",
+                 width=2 if self.focused else 1)
         if selected:
             _icon(self, "check", 3, 8, 16, "white", 2)
         self.create_text(28, 16, text=self.label, anchor="w", fill=INK,
@@ -243,21 +260,31 @@ class CheckChoice(tk.Canvas):
 class MetricCard(tk.Canvas):
     def __init__(self, master, title, variable, color, icon, command=None):
         super().__init__(master, height=84, bg=BG, highlightthickness=0, bd=0,
-                         cursor="hand2" if command else "")
+                         cursor="hand2" if command else "",
+                         takefocus=bool(command))
         self.title = title
         self.variable = variable
         self.color = color
         self.icon = icon
         self.command = command
         self.hover = False
+        self.focused = False
         self.bind("<Configure>", lambda _e: self.draw())
         self.bind("<Enter>", lambda _e: self._hover(True))
         self.bind("<Leave>", lambda _e: self._hover(False))
         self.bind("<Button-1>", lambda _e: self.command() if self.command else None)
+        self.bind("<Return>", lambda _e: self.command() if self.command else None)
+        self.bind("<space>", lambda _e: self.command() if self.command else None)
+        self.bind("<FocusIn>", lambda _e: self._focus(True))
+        self.bind("<FocusOut>", lambda _e: self._focus(False))
         variable.trace_add("write", lambda *_a: self.draw())
 
     def _hover(self, value):
         self.hover = value
+        self.draw()
+
+    def _focus(self, value):
+        self.focused = value
         self.draw()
 
     def draw(self):
@@ -265,10 +292,15 @@ class MetricCard(tk.Canvas):
         width = max(self.winfo_width(), 120)
         height = max(self.winfo_height(), 80)
         shadow = "#d8e0ea"
-        self.create_rectangle(5, 6, width - 2, height - 2, fill=shadow, outline="")
-        _rounded(self, 1, 1, width - 5, height - 6, 12,
-                 fill="#f8fbff" if self.hover else SURFACE,
-                 outline="#b8d6f6" if self.hover else BORDER)
+        _rounded(self, 5, 6, width - 2, height - 2, 12,
+                 fill=shadow, outline="")
+        _vertical_gradient(
+            self, 1, 1, width - 6, height - 7,
+            "#ffffff", "#f7faff" if self.hover else "#fbfcfe", 12,
+        )
+        _rounded(self, 1, 1, width - 5, height - 6, 12, fill="",
+                 outline=BLUE if self.focused else "#b8d6f6" if self.hover else BORDER,
+                 width=2 if self.focused else 1)
         self.create_oval(14, 12, 32, 30, fill=self.color, outline="")
         image = _fluent(self.icon, "white", 16)
         if image:
@@ -289,8 +321,13 @@ class ToggleChip(tk.Canvas):
         self.icon = icon
         self.user_command = command
         super().__init__(master, height=40, bg=SURFACE, highlightthickness=0,
-                         bd=0, cursor="hand2")
+                         bd=0, cursor="hand2", takefocus=True)
+        self.focused = False
         self.bind("<Button-1>", lambda _e: self.toggle())
+        self.bind("<space>", lambda _e: self.toggle())
+        self.bind("<Return>", lambda _e: self.toggle())
+        self.bind("<FocusIn>", lambda _e: self._focus(True))
+        self.bind("<FocusOut>", lambda _e: self._focus(False))
         self.bind("<Configure>", lambda _e: self.sync())
         variable.trace_add("write", lambda *_a: self.sync())
         self.sync()
@@ -300,13 +337,18 @@ class ToggleChip(tk.Canvas):
         if self.user_command:
             self.user_command()
 
+    def _focus(self, value):
+        self.focused = value
+        self.sync()
+
     def sync(self):
         selected = bool(self.variable.get())
         self.delete("all")
         width = max(120, self.winfo_width())
         _rounded(self, 1, 2, width-2, 38, 8,
                  fill=_blend(self.color, "#ffffff", .92) if selected else "#fafbfd",
-                 outline=self.color if selected else BORDER)
+                 outline=BLUE if self.focused else self.color if selected else BORDER,
+                 width=2 if self.focused else 1)
         kind = {"입교예정": "calendar", "예약조회": "calendar",
                 "수료조회": "document_text", "조회오류": "error",
                 "미수료": "dismiss_circle", "보류": "pause",
@@ -339,7 +381,7 @@ class ActionCard(tk.Canvas):
     def __init__(self, master, title, subtitle, icon, command, color, height=92,
                  fg="white", state="normal"):
         super().__init__(master, height=height, bg=SURFACE, highlightthickness=0,
-                         bd=0, cursor="hand2")
+                         bd=0, cursor="hand2", takefocus=True)
         self.title = title
         self.subtitle = subtitle
         self.icon = icon
@@ -348,13 +390,22 @@ class ActionCard(tk.Canvas):
         self.fg = fg
         self.state = state
         self.hover = False
+        self.focused = False
         self.bind("<Configure>", lambda _e: self.draw())
         self.bind("<Enter>", lambda _e: self._hover(True))
         self.bind("<Leave>", lambda _e: self._hover(False))
         self.bind("<Button-1>", self._click)
+        self.bind("<space>", self._click)
+        self.bind("<Return>", self._click)
+        self.bind("<FocusIn>", lambda _e: self._focus(True))
+        self.bind("<FocusOut>", lambda _e: self._focus(False))
 
     def _hover(self, value):
         self.hover = value
+        self.draw()
+
+    def _focus(self, value):
+        self.focused = value
         self.draw()
 
     def _click(self, _event):
@@ -377,12 +428,15 @@ class ActionCard(tk.Canvas):
         height = max(self.winfo_height(), 34)
         color = "#c9d2dd" if self.state == "disabled" else self.color
         if self.hover and self.state != "disabled":
-            color = _blend(color, "#000000", .10)
+            color = _blend(color, "#ffffff", .035)
         _rounded(self, 6, 7, width - 2, height - 1, 10,
-                 fill="#dbe3ec", outline="")
-        _rounded(self, 1, 1, width - 7, height - 7, 10, fill=color, outline="")
-        self.create_line(12, 2, width - 18, 2,
-                         fill=_blend(color, "#ffffff", .32), width=1)
+                 fill="#d6dee8" if not self.hover else "#cbd7e5", outline="")
+        top = _blend(color, "#ffffff", .055)
+        bottom = _blend(color, "#000000", .035)
+        _vertical_gradient(self, 1, 1, width - 8, height - 8, top, bottom, 10)
+        _rounded(self, 1, 1, width - 7, height - 7, 10, fill="",
+                 outline=BLUE if self.focused else _blend(color, "#ffffff", .22),
+                 width=2 if self.focused else 1)
         icon_y = height / 2 if not self.subtitle else max(25, height * .34)
         kind = {"선택 조건으로 조회": "search", "오늘 업무": "settings",
                 "조회 결과 보기": "document_text", "조회 중지": "stop",
@@ -417,6 +471,24 @@ def _blend(first, second, amount):
     a, b = rgb(first), rgb(second)
     mixed = tuple(round(x + (y - x) * amount) for x, y in zip(a, b))
     return "#" + "".join(f"{value:02x}" for value in mixed)
+
+
+def _vertical_gradient(canvas, x, y, width, height, top, bottom, radius=10):
+    """Paint a subtle Windows-style gradient with rounded corner masking."""
+    if width <= 2 or height <= 2:
+        return
+    for row in range(height):
+        ratio = row / max(height - 1, 1)
+        color = _blend(top, bottom, ratio)
+        inset = 0
+        if row < radius:
+            offset = radius - row
+            inset = max(0, round(radius - (radius * radius - offset * offset) ** .5))
+        elif row >= height - radius:
+            offset = row - (height - radius - 1)
+            inset = max(0, round(radius - (radius * radius - offset * offset) ** .5))
+        canvas.create_line(x + inset, y + row, x + width - inset, y + row,
+                           fill=color)
 
 
 def _panel(master, padding=12):
