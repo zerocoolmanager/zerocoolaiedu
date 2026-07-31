@@ -12,7 +12,7 @@ ApplicationWindow {
     minimumWidth: 980
     minimumHeight: 660
     visible: true
-    title: "ZeroCool AI · 서울·경기·인천 교육수료 관리 v15.0.3"
+    title: "ZeroCool AI · 서울·경기·인천 교육수료 관리 v15.0.10"
     color: "#f4f7fb"
 
     readonly property color navy: "#f3f6f9"
@@ -404,12 +404,22 @@ ApplicationWindow {
                                 font.weight: Font.DemiBold
                             }
                             Rectangle { width: parent.width; height: 1; color: "#e6ebf1" }
-                            Text {
-                                text: "1.  파일 및 기관 선택"
-                                color: window.blue
-                                font.family: "Segoe UI"
-                                font.pixelSize: 13
-                                font.weight: Font.DemiBold
+                            Row {
+                                width: parent.width
+                                Text {
+                                    text: "1.  파일 및 기관 선택"
+                                    color: window.blue
+                                    font.family: "Segoe UI"
+                                    font.pixelSize: 13
+                                    font.weight: Font.DemiBold
+                                    anchors.verticalCenter: parent.verticalCenter
+                                }
+                                Item { width: Math.max(8, parent.width - parent.children[0].width - regionAll.width); height: 1 }
+                                SectionSelectAll {
+                                    id: regionAll
+                                    selected: backend.allRegionsSelected
+                                    onClicked: backend.toggleAllRegions()
+                                }
                             }
                             Button {
                                 id: fileButton
@@ -444,7 +454,7 @@ ApplicationWindow {
                                     model: ["서울", "경기", "인천"]
                                     delegate: Button {
                                         required property string modelData
-                                        property bool selected: backend.regionChecked(modelData) && backend.statusText.length >= 0
+                                        property bool selected: backend.regionStates[modelData] === true
                                         height: 28; width: 64
                                         flat: true
                                         background: Rectangle { color: "transparent" }
@@ -477,7 +487,7 @@ ApplicationWindow {
                                         border.color: "#bdc8d5"
                                         Text { anchors.centerIn: parent; visible: parent.parent.parent.selected; text: "✓"; color: "white"; font.pixelSize: 12; font.weight: Font.Bold }
                                     }
-                                    Text { text: "백그라운드 모드 (작은 창)"; color: "#30445e"; font.pixelSize: 12; anchors.verticalCenter: parent.verticalCenter }
+                                    Text { text: parent.parent.parent.selected ? "브라우저 완전 숨김 (실패 시 작은 창)" : "브라우저 표시 · 좌측 상단 작은 창"; color: "#30445e"; font.pixelSize: 11; anchors.verticalCenter: parent.verticalCenter }
                                 }
                                 onClicked: backend.setBackgroundMode(!selected)
                             }
@@ -509,6 +519,13 @@ ApplicationWindow {
                                     color: window.blue
                                     font.pixelSize: 13
                                     font.weight: Font.DemiBold
+                                    anchors.verticalCenter: parent.verticalCenter
+                                }
+                                Item { width: Math.max(8, parent.width - parent.children[0].width - statusAll.width); height: 1 }
+                                SectionSelectAll {
+                                    id: statusAll
+                                    selected: backend.allStatusesSelected
+                                    onClicked: backend.toggleAllStatuses()
                                 }
                             }
                             Grid {
@@ -526,17 +543,27 @@ ApplicationWindow {
                                         width: (parent.width - 8) / 2
                                         label: modelData[0]
                                         accent: modelData[1]
-                                        checkedValue: backend.statusChecked(label) && backend.statusText.length >= 0
+                                        checkedValue: backend.statusStates[label] === true
                                         onClicked: backend.toggleStatus(label)
                                     }
                                 }
                             }
                             Rectangle { width: parent.width; height: 1; color: "#e6ebf1" }
-                            Text {
-                                text: "3.  조회 항목"
-                                color: window.blue
-                                font.pixelSize: 13
-                                font.weight: Font.DemiBold
+                            Row {
+                                width: parent.width
+                                Text {
+                                    text: "3.  조회 항목"
+                                    color: window.blue
+                                    font.pixelSize: 13
+                                    font.weight: Font.DemiBold
+                                    anchors.verticalCenter: parent.verticalCenter
+                                }
+                                Item { width: Math.max(8, parent.width - parent.children[0].width - queryAll.width); height: 1 }
+                                SectionSelectAll {
+                                    id: queryAll
+                                    selected: backend.allQueriesSelected
+                                    onClicked: backend.toggleAllQueries()
+                                }
                             }
                             Grid {
                                 width: parent.width
@@ -547,14 +574,14 @@ ApplicationWindow {
                                     width: window.compact ? parent.width : (parent.width - 8) / 2
                                     label: "수료조회"; subtitle: "실제 수료 여부 확인"
                                     iconName: "board"; accent: "#169b55"
-                                    checkedValue: backend.queryChecked(label) && backend.statusText.length >= 0
+                                    checkedValue: backend.queryStates[label] === true
                                     onClicked: backend.toggleQuery(label)
                                 }
                                 CheckPill {
                                     width: window.compact ? parent.width : (parent.width - 8) / 2
                                     label: "예약조회"; subtitle: "예약 일정 확인"
                                     iconName: "calendar"; accent: "#0f6cbd"
-                                    checkedValue: backend.queryChecked(label) && backend.statusText.length >= 0
+                                    checkedValue: backend.queryStates[label] === true
                                     onClicked: backend.toggleQuery(label)
                                 }
                             }
@@ -671,18 +698,18 @@ ApplicationWindow {
                             focusPolicy: Qt.StrongFocus
                             background: Rectangle {
                                 radius: 8
-                                color: !parent.enabled ? "#edf0f4" : (parent.down ? "#b4232c" : parent.hovered ? "#e33d46" : "#d92d36")
-                                border.width: parent.activeFocus && parent.focusReason === Qt.TabFocusReason ? 2 : 0
-                                border.color: "#111111"
+                                color: !parent.enabled ? "#f2f4f7" : (parent.down ? "#fee4e6" : parent.hovered ? "#fff0f1" : "#fff8f8")
+                                border.width: parent.activeFocus && parent.focusReason === Qt.TabFocusReason ? 2 : 1
+                                border.color: !parent.enabled ? "#d8dee7" : (parent.activeFocus ? "#111111" : "#e8a8ae")
                             }
                             contentItem: Row {
                                 spacing: 10
                                 anchors.centerIn: parent
-                                FluentIcon { name: "stop"; tone: parent.parent.enabled ? "white" : "muted"; iconSize: 20 }
+                                FluentIcon { name: "stop"; tone: parent.parent.enabled ? "red" : "muted"; iconSize: 18 }
                                 Text {
                                     text: backend.running || backend.canResume ? "조회 완전 종료" : "조회 대기"
-                                    color: parent.parent.enabled ? "white" : "#8a95a5"
-                                    font.pixelSize: 14
+                                    color: parent.parent.enabled ? "#c62832" : "#8a95a5"
+                                    font.pixelSize: 12
                                     font.weight: Font.DemiBold
                                 }
                             }
@@ -793,6 +820,25 @@ ApplicationWindow {
                                 }
                                 onClicked: backend.setActiveTab(1)
                             }
+                            Button {
+                                height: 34
+                                width: 100
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: backend.counts.error > 0 ? "오류·검토 " + backend.counts.error : "오류·검토"
+                                checked: backend.activeTab === 2
+                                background: Rectangle {
+                                    radius: 8
+                                    color: parent.checked ? "#ffffff" : "#f1f4f8"
+                                    border.width: parent.checked ? 1 : 0
+                                    border.color: parent.checked ? "#d92d36" : "transparent"
+                                }
+                                contentItem: Text {
+                                    text: parent.text; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
+                                    color: parent.checked ? "#c62832" : "#64748b"; font.pixelSize: parent.checked ? 12 : 11
+                                    font.weight: parent.checked ? Font.DemiBold : Font.Normal
+                                }
+                                onClicked: backend.setActiveTab(2)
+                            }
                         }
                         Rectangle {
                             width: parent.width
@@ -801,33 +847,100 @@ ApplicationWindow {
                             color: "#052a4b"
                             border.color: "#0a3a64"
                             border.width: 1
-                            TextArea {
-                                id: logArea
+                            Flickable {
+                                id: logFlick
+                                objectName: "logFlick"
                                 anchors.fill: parent
                                 anchors.margins: 10
                                 visible: backend.activeTab === 0
-                                readOnly: true
-                                text: backend.logText
-                                color: "#eef7ff"
-                                selectionColor: "#1c6fc2"
-                                selectedTextColor: "white"
-                                wrapMode: TextEdit.NoWrap
-                                font.family: "Cascadia Mono"
-                                font.pixelSize: 11
-                                background: null
-                                onTextChanged: cursorPosition = length
+                                clip: true
+                                boundsBehavior: Flickable.StopAtBounds
+                                contentWidth: width
+                                contentHeight: Math.max(height, logArea.height + 12)
+                                function scrollToEnd() {
+                                    contentY = Math.max(0, contentHeight - height)
+                                }
+                                Component.onCompleted: Qt.callLater(scrollToEnd)
+                                onContentHeightChanged: Qt.callLater(scrollToEnd)
+                                onHeightChanged: Qt.callLater(scrollToEnd)
+                                Behavior on contentY {
+                                    NumberAnimation { duration: 90; easing.type: Easing.OutCubic }
+                                }
+                                ScrollBar.vertical: ScrollBar {
+                                    id: logScrollBar
+                                    policy: ScrollBar.AsNeeded
+                                    width: 7
+                                    padding: 1
+                                    background: Rectangle { color: "transparent" }
+                                    contentItem: Rectangle {
+                                        implicitWidth: 4
+                                        radius: 2
+                                        color: "#8aa8bf"
+                                        opacity: logScrollBar.active ? 0.52 : 0.18
+                                        Behavior on opacity { NumberAnimation { duration: 140 } }
+                                    }
+                                }
+                                TextArea {
+                                    id: logArea
+                                    objectName: "logArea"
+                                    x: 2
+                                    y: 2
+                                    width: logFlick.width - 11
+                                    height: Math.max(logFlick.height - 4, contentHeight + 8)
+                                    readOnly: true
+                                    text: backend.logText
+                                    color: "#eef7ff"
+                                    selectionColor: "#1c6fc2"
+                                    selectedTextColor: "white"
+                                    wrapMode: TextEdit.NoWrap
+                                    font.family: "Cascadia Mono"
+                                    font.pixelSize: 11
+                                    background: null
+                                    onTextChanged: Qt.callLater(logFlick.scrollToEnd)
+                                }
                             }
                             Column {
                                 visible: backend.activeTab === 1
-                                anchors.centerIn: parent
+                                anchors.fill: parent
+                                anchors.margins: 16
                                 spacing: 12
-                                FluentIcon { anchors.horizontalCenter: parent.horizontalCenter; name: "document_text"; tone: "blue"; iconSize: 24 }
-                                Text { text: "조회 결과 파일"; color: "white"; font.pixelSize: 15; font.weight: Font.DemiBold }
-                                Text { text: "최근 생성된 결과를 Excel에서 확인합니다."; color: "#a9c2d8"; font.pixelSize: 11 }
-                                Button {
-                                    anchors.horizontalCenter: parent.horizontalCenter
-                                    text: "결과 열기"
-                                    onClicked: backend.openResults()
+                                Text { text: "조회 완료 요약"; color: "white"; font.pixelSize: 15; font.weight: Font.DemiBold }
+                                TextArea {
+                                    width: parent.width
+                                    height: Math.max(120, parent.height - 105)
+                                    readOnly: true
+                                    text: backend.resultText
+                                    color: "#eaf4ff"
+                                    wrapMode: TextEdit.Wrap
+                                    font.pixelSize: 12
+                                    background: Rectangle { radius: 7; color: "#0a3559"; border.color: "#18527f" }
+                                }
+                                Row {
+                                    spacing: 8
+                                    Button { text: "결과파일 열기"; onClicked: backend.openResults() }
+                                    Button { text: "결과폴더 열기"; onClicked: backend.openResultsFolder() }
+                                }
+                            }
+                            Column {
+                                visible: backend.activeTab === 2
+                                anchors.fill: parent
+                                anchors.margins: 16
+                                spacing: 12
+                                Text { text: "오류·검토 내용"; color: "white"; font.pixelSize: 15; font.weight: Font.DemiBold }
+                                TextArea {
+                                    width: parent.width
+                                    height: Math.max(120, parent.height - 105)
+                                    readOnly: true
+                                    text: backend.errorText
+                                    color: backend.counts.error > 0 ? "#ffd9dc" : "#d5e8f7"
+                                    wrapMode: TextEdit.Wrap
+                                    font.pixelSize: 11
+                                    background: Rectangle { radius: 7; color: "#0a3559"; border.color: backend.counts.error > 0 ? "#a53b46" : "#18527f" }
+                                }
+                                Row {
+                                    spacing: 8
+                                    Button { text: "오류 캡처 폴더"; onClicked: backend.openDebugFolder() }
+                                    Button { text: "로그 저장"; onClicked: backend.saveLog() }
                                 }
                             }
                         }
@@ -836,8 +949,26 @@ ApplicationWindow {
                             width: parent.width
                             height: 40
                             spacing: 8
-                            Button { height: 38; text: "로그 저장"; icon.source: "../assets/fluent/png/save_ink_16.png"; onClicked: backend.saveLog() }
-                            Button { height: 38; text: "로그 지우기"; icon.source: "../assets/fluent/png/delete_ink_16.png"; onClicked: backend.clearLog() }
+                            Button {
+                                height: 36; width: 106; hoverEnabled: true
+                                background: Rectangle { radius: 7; color: parent.down ? "#e8f1fb" : parent.hovered ? "#f4f8fc" : "#ffffff"; border.color: "#cad5e2" }
+                                contentItem: Row {
+                                    anchors.centerIn: parent; spacing: 7
+                                    FluentIcon { name: "save"; tone: "ink"; iconSize: 16 }
+                                    Text { text: "로그 저장"; color: "#30445e"; font.pixelSize: 11; anchors.verticalCenter: parent.verticalCenter }
+                                }
+                                onClicked: backend.saveLog()
+                            }
+                            Button {
+                                height: 36; width: 106; hoverEnabled: true
+                                background: Rectangle { radius: 7; color: parent.down ? "#f3e9ea" : parent.hovered ? "#fff6f6" : "#ffffff"; border.color: "#d9c9cb" }
+                                contentItem: Row {
+                                    anchors.centerIn: parent; spacing: 7
+                                    FluentIcon { name: "delete"; tone: "muted"; iconSize: 16 }
+                                    Text { text: "로그 지우기"; color: "#56667a"; font.pixelSize: 11; anchors.verticalCenter: parent.verticalCenter }
+                                }
+                                onClicked: backend.clearLog()
+                            }
                             Item { width: Math.max(0, parent.width - 230); height: 1 }
                             Text { text: "자동 스크롤"; color: "#52647b"; font.pixelSize: 10; anchors.verticalCenter: parent.verticalCenter }
                         }
@@ -884,22 +1015,26 @@ ApplicationWindow {
                 font.pixelSize: 9
             }
             Button {
-                width: parent.width * .06
-                height: 32
+                width: Math.max(72, parent.width * .06)
+                height: 34
                 anchors.verticalCenter: parent.verticalCenter
                 hoverEnabled: true
                 background: Rectangle {
                     radius: 7
-                    color: parent.hovered ? "#fff0f1" : "#fff7f7"
-                    border.color: "#f2b9bd"
+                    color: parent.down ? "#fee4e6" : parent.hovered ? "#fff0f1" : "#ffffff"
+                    border.color: "#e8a8ae"
                 }
-                contentItem: Text {
-                    text: "종료"
-                    color: "#d92d36"
-                    font.pixelSize: 11
-                    font.weight: Font.DemiBold
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
+                contentItem: Row {
+                    anchors.centerIn: parent
+                    spacing: 6
+                    FluentIcon { name: "stop"; tone: "red"; iconSize: 14 }
+                    Text {
+                        text: "종료"
+                        color: "#c62832"
+                        font.pixelSize: 11
+                        font.weight: Font.DemiBold
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
                 }
                 onClicked: backend.quitApplication()
             }

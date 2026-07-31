@@ -29,7 +29,7 @@ URLS={
 from history_store import person_key, row_fingerprint, get_state, note_seen, save_query
 
 OUT_COLS=['예약일','교육방식','사이트','예약상태','수료여부','수료일','구분','교육종류','교육장소','예약조회내용','수료조회내용','최종조회일시']
-APP_VERSION='15.0.2'
+APP_VERSION='15.0.10'
 SEOUL_ONLINE_SCHEDULE_2026={1:'2026-07-26',2:'2026-07-27',3:'2026-08-10',4:'2026-08-11'}
 
 REGION_COLUMN_NAMES=[
@@ -334,6 +334,21 @@ class CompletionResult:
 def clean_digits(v):
     if pd.isna(v) or v is None: return ''
     return re.sub(r'\D','',str(v))
+def fixed_digit_segment(value,width):
+    """Restore leading zeroes lost when Excel reads a digit segment as numeric."""
+    digits=clean_digits(value)
+    if not digits:return ''
+    return digits[-width:].zfill(width)
+def normalized_phone(full='',part1='',part2='',part3=''):
+    digits=clean_digits(full)
+    if digits:
+        if len(digits)==10 and digits.startswith('10'):digits='0'+digits
+        return digits[:11]
+    return (
+        fixed_digit_segment(part1,3)+
+        fixed_digit_segment(part2,4)+
+        fixed_digit_segment(part3,4)
+    )
 def text(v): return '' if pd.isna(v) or v is None else str(v).strip()
 def normalize_date(v, year=None):
     if v is None or pd.isna(v): return ''
@@ -426,31 +441,49 @@ def people_from_df(df):
     for i,row in df.iterrows():
         name=text(row.get(namec,''));
         if not name:continue
-        resident=clean_digits(row.get(full,'')) if full else clean_digits(row.get(front,''))+clean_digits(row.get(back,''))
-        phone=clean_digits(row.get(phonefull,'')) if phonefull else clean_digits(row.get(p1,''))+clean_digits(row.get(p2,''))+clean_digits(row.get(p3,''))
+        resident=(clean_digits(row.get(full,'')) if full else
+                  fixed_digit_segment(row.get(front,''),6)+fixed_digit_segment(row.get(back,''),7))
+        phone=normalized_phone(
+            row.get(phonefull,'') if phonefull else '',
+            row.get(p1,'') if p1 else '',
+            row.get(p2,'') if p2 else '',
+            row.get(p3,'') if p3 else '',
+        )
         out.append(Person(i,text(row.get(comp,'')),name,resident[:13],phone[:11],normalize_date(row.get(req,''))))
     return out
 
-BROWSER_MODE='background'
+BROWSER_MODE='hidden'
 
 def driver_new(headless=False):
-    # 최소화/헤드리스는 일부 교육 사이트에서 입력 요소가 사라지는 문제가 있어 사용하지 않는다.
-    # background 모드는 실제 표시 창을 작게 만들어 주 모니터 좌측 상단에 배치한다.
-    o=webdriver.ChromeOptions()
-    base_args=['--disable-blink-features=AutomationControlled','--disable-dev-shm-usage','--no-sandbox','--lang=ko-KR']
-    if BROWSER_MODE=='background':
-        base_args += ['--window-size=560,700']
-    else:
-        base_args += ['--start-maximized']
-    for a in base_args:
-        o.add_argument(a)
-    o.add_experimental_option('excludeSwitches',['enable-automation'])
+    active_mode=BROWSER_MODE
+    def make_options(mode):
+        o=webdriver.ChromeOptions()
+        args=['--disable-blink-features=AutomationControlled','--disable-dev-shm-usage','--no-sandbox','--lang=ko-KR']
+        if mode=='hidden':
+            args += ['--headless=new','--disable-gpu','--window-size=1365,900']
+        elif mode=='background':
+            args += ['--window-size=560,700','--window-position=20,45']
+        else:
+            # Visible mode must never inherit Chrome's previous maximized state.
+            args += ['--window-size=560,700','--window-position=20,45']
+        for a in args:o.add_argument(a)
+        o.add_experimental_option('excludeSwitches',['enable-automation'])
+        return o
     try:
-        d=webdriver.Chrome(options=o)
+        d=webdriver.Chrome(options=make_options(BROWSER_MODE))
     except Exception as e:
-        raise RuntimeError(f'Chrome 실행 실패: Google Chrome 설치와 인터넷 연결을 확인하세요. {type(e).__name__}: {e}') from e
+        if BROWSER_MODE!='hidden':
+            raise RuntimeError(f'Chrome 실행 실패: Google Chrome 설치와 인터넷 연결을 확인하세요. {type(e).__name__}: {e}') from e
+        print(f'BROWSER|완전 숨김 실행 실패 · 좌측 상단 작은 창으로 자동 전환 · {type(e).__name__}',flush=True)
+        try:
+            d=webdriver.Chrome(options=make_options('background'))
+            active_mode='background'
+        except Exception as fallback_error:
+            raise RuntimeError(f'Chrome 실행 실패: Google Chrome 설치와 인터넷 연결을 확인하세요. {type(fallback_error).__name__}: {fallback_error}') from fallback_error
     d.set_page_load_timeout(45)
-    if BROWSER_MODE=='background':
+    if active_mode=='hidden':
+        print('BROWSER|완전 숨김 모드로 실행', flush=True)
+    elif active_mode in ('background','normal'):
         try:
             # 듀얼 모니터 경계를 넘어가지 않도록 주 화면 좌측 상단 고정 좌표를 사용한다.
             import ctypes
@@ -464,8 +497,6 @@ def driver_new(headless=False):
             except Exception:
                 pass
         print('BROWSER|좌측 상단 작은 창 모드로 실행', flush=True)
-    else:
-        print('BROWSER|일반 Chrome 표시 모드로 실행', flush=True)
     return d
 
 def driver_alive(d):
@@ -490,9 +521,20 @@ def ensure_driver(d,headless=False):
     return nd,True
 
 def vis_inputs(d):return [x for x in d.find_elements(By.CSS_SELECTOR,'input') if x.is_displayed() and x.is_enabled()]
-def attrs(e):return ' '.join((e.get_attribute(k) or '') for k in ['name','id','placeholder','title','aria-label']).lower()
+def attrs(e):return ' '.join((e.get_attribute(k) or '') for k in ['name','id','placeholder','title','aria-label','alt']).lower()
 def score(e,words):return sum(10 for w in words if w.lower() in attrs(e))
 def fill(e,v):e.click();e.clear();e.send_keys(v)
+def input_by_name(d,*names):
+    """Find a visible input by exact name/id, excluding unrelated site search."""
+    wanted={str(x).strip().lower() for x in names if str(x).strip()}
+    for e in d.find_elements(By.CSS_SELECTOR,'input'):
+        try:
+            key=(e.get_attribute('name') or e.get_attribute('id') or '').strip().lower()
+            if key in wanted and e.is_displayed() and e.is_enabled():
+                return e
+        except Exception:
+            continue
+    return None
 def click_consent(d):
     clicked=False
     for e in d.find_elements(By.CSS_SELECTOR,"input[type='checkbox']"):
@@ -502,6 +544,36 @@ def click_consent(d):
                 clicked=True
             except:pass
     return clicked
+
+def set_required_consents(d, region, mode, *field_ids):
+    """Select only the consent fields required by the current site/form.
+
+    Some sites hide the native checkbox and expose a styled label.  Selenium's
+    displayed-only click therefore misses it.  Setting the checked property
+    and emitting input/change events satisfies the form without opening the
+    site's 'full text' modal.
+    """
+    selected=[]
+    for field_id in field_ids:
+        candidates=d.find_elements(
+            By.CSS_SELECTOR,
+            f"input#{field_id},input[name='{field_id}']",
+        )
+        target=next((e for e in candidates if e.is_enabled()),None)
+        if target is None:
+            raise RuntimeError(f'{region} {mode} 필수 동의항목({field_id})을 찾지 못했습니다.')
+        d.execute_script("""
+            const e=arguments[0];
+            e.checked=true;
+            e.setAttribute('checked','checked');
+            e.dispatchEvent(new Event('input',{bubbles:true}));
+            e.dispatchEvent(new Event('change',{bubbles:true}));
+        """,target)
+        if not target.is_selected():
+            raise RuntimeError(f'{region} {mode} 필수 동의항목({field_id}) 선택에 실패했습니다.')
+        selected.append(field_id)
+    print(f'CONSENT|{region}|{mode}|{"+".join(selected) if selected else "동의절차없음"}|완료',flush=True)
+    return True
 
 def close_seoul_consent_popup(d, timeout=5):
     """서울 예약조회에서 개인정보 동의 직후 뜨는 안내 팝업만 닫는다.
@@ -642,7 +714,7 @@ def fill_identity_form(d,name,resident,phone,need_phone=False):
             fill(ph[0],phone[:3]);fill(ph[1],phone[3:7]);fill(ph[2],phone[7:11])
         elif ph:fill(ph[0],phone)
         elif need_phone and rem:fill(rem[-1],phone)
-    click_consent(d)
+    # 서울 수료조회 페이지에는 별도의 필수 동의 체크박스가 없다.
 
 def _switch_to_kytti_input_context(d, timeout=12):
     """경기 페이지 입력칸이 본문 또는 iframe에 늦게 나타나는 경우까지 찾는다."""
@@ -673,7 +745,7 @@ def _switch_to_kytti_input_context(d, timeout=12):
     except Exception:pass
     return []
 
-def fill_kytti_form(d,name,resident):
+def fill_kytti_form(d,name,resident,mode='조회'):
     """경기도 페이지의 표시 문구/placeholder를 기준으로 정확히 입력한다."""
     inputs=_switch_to_kytti_input_context(d,12)
     name_el=next((e for e in inputs if '실명' in (e.get_attribute('placeholder') or '') or '이름' in attrs(e)),None)
@@ -684,7 +756,7 @@ def fill_kytti_form(d,name,resident):
     resident=clean_digits(resident)
     if len(resident)!=13: raise RuntimeError('경기 조회에는 주민등록번호 13자리가 필요합니다.')
     fill(name_el,name);fill(front_el,resident[:6]);fill(back_el,resident[6:])
-    click_consent(d)
+    set_required_consents(d,'경기',mode,'agree_ch')
 
 def wait_after_submit(d,old_url,seconds=12):
     try:
@@ -728,7 +800,7 @@ def fill_seoul_receipt_form(d,p:Person):
         fill(rr[0],resident[:6]);fill(rr[1],resident[6:13])
     elif rr:
         fill(rr[0],resident[:6])
-    click_consent(d)
+    set_required_consents(d,'서울','예약조회','cert1','cert2')
 
 def fill_incheon_reservation_form(d,p:Person):
     """인천 집합교육 예약확인: 성명, 생년월일, 전화번호(010 선택)를 입력한다."""
@@ -737,25 +809,31 @@ def fill_incheon_reservation_form(d,p:Person):
     birth=clean_digits(p.resident)[:6]
     phone=clean_digits(p.phone)
     if len(birth)!=6:raise RuntimeError('인천 예약조회에는 생년월일 6자가 필요합니다.')
-    if len(phone)<10:raise RuntimeError('인천 예약조회에는 휴대전화번호가 필요합니다.')
-    # 전화번호 앞자리는 반드시 select에서 010을 선택한다.
-    selected=False
-    for e in d.find_elements(By.TAG_NAME,'select'):
-        try:
-            if not e.is_displayed() or not e.is_enabled():continue
-            opts=[(o.text or '').strip() for o in Select(e).options]
-            if '010' in opts:
-                Select(e).select_by_visible_text('010');selected=True;break
-        except Exception:continue
-    if not selected:
+    if len(phone)!=11 or not phone.startswith('010'):
+        raise RuntimeError('인천 예약조회에는 010으로 시작하는 휴대전화번호 11자리가 필요합니다.')
+    # 현재 인천 폼의 정확한 필드 계약: phone1(select), phone2, phone3.
+    phone1_candidates=d.find_elements(By.CSS_SELECTOR,"select[name='phone1']")
+    phone1=next((e for e in phone1_candidates if e.is_displayed() and e.is_enabled()),None)
+    if phone1 is None:
         raise RuntimeError('인천 휴대전화 앞자리 선택항목에서 010을 찾지 못했습니다.')
-    name_el=max(inputs,key=lambda e:score(e,['name','성명','이름']))
+    try:
+        selector=Select(phone1)
+        selector.select_by_value('010')
+        selected_value=(selector.first_selected_option.get_attribute('value') or '').strip()
+        selected_text=(selector.first_selected_option.text or '').strip()
+        if selected_value!='010' and selected_text!='010':
+            raise RuntimeError('010 선택 상태를 확인하지 못했습니다.')
+    except Exception as exc:
+        raise RuntimeError(f'인천 휴대전화 앞자리 010 선택에 실패했습니다: {exc}') from exc
+    name_el=input_by_name(d,'name') or max(inputs,key=lambda e:score(e,['name','성명','이름']))
     fill(name_el,p.name)
     rem=[e for e in inputs if e!=name_el]
-    birth_el=max(rem,key=lambda e:score(e,['birth','생년','주민','jumin']))
+    birth_el=input_by_name(d,'jumin1') or max(rem,key=lambda e:score(e,['birth','생년','주민','jumin']))
     fill(birth_el,birth)
     rem=[e for e in rem if e!=birth_el]
-    phone_inputs=sorted(rem,key=lambda e:score(e,['phone','tel','휴대','연락']),reverse=True)
+    phone_inputs=[e for e in (input_by_name(d,'phone2'),input_by_name(d,'phone3')) if e is not None]
+    if len(phone_inputs)<2:
+        phone_inputs=sorted(rem,key=lambda e:score(e,['phone','tel','휴대','연락']),reverse=True)
     tail=phone[3:]
     if len(phone_inputs)>=2:
         fill(phone_inputs[0],tail[:4]);fill(phone_inputs[1],tail[4:8])
@@ -763,7 +841,11 @@ def fill_incheon_reservation_form(d,p:Person):
         fill(phone_inputs[0],tail)
     else:
         raise RuntimeError('인천 전화번호 뒤 8자리 입력칸을 찾지 못했습니다.')
-    click_consent(d)
+    if ((phone_inputs[0].get_attribute('value') or '') != tail[:4] or
+            (phone_inputs[1].get_attribute('value') or '') != tail[4:8]):
+        raise RuntimeError('인천 휴대전화 뒤 8자리 입력값 검증에 실패했습니다.')
+    print('FORM_INPUT|인천|예약조회|phone1=010|phone2=4자리|phone3=4자리|완료',flush=True)
+    print('CONSENT|인천|예약조회|동의절차없음|완료',flush=True)
 
 def _current_year_reservation(body,rows,region):
     """결과표에서 당해연도 예약/접수/교육예정 행만 추출한다."""
@@ -814,7 +896,7 @@ def reservation_lookup(d,region,p:Person,debug:Path,n:int)->ReservationResult:
             click_seoul_reservation_change(d,debug,f'{n:04d}_서울예약')
         fill_seoul_receipt_form(d,p)
     elif region=='경기':
-        fill_kytti_form(d,p.name,p.resident)
+        fill_kytti_form(d,p.name,p.resident,'예약조회')
     elif region=='인천':
         fill_incheon_reservation_form(d,p)
     else:
@@ -941,12 +1023,18 @@ def fill_incheon_form(d,name,birth):
                 d.switch_to.default_content()
                 if frame is not None:d.switch_to.frame(frame)
                 ins=[e for e in vis_inputs(d) if (e.get_attribute('type') or 'text').lower() in {'text','tel','number'}]
-                name_el=next((e for e in ins if any(k in attrs(e) for k in ('name','성명','이름'))),None)
-                birth_el=next((e for e in ins if any(k in attrs(e) for k in ('birth','생년','birthday')) and e is not name_el),None)
-                if not name_el and ins:name_el=ins[0]
-                if not birth_el and len(ins)>=2:birth_el=ins[1]
+                # The page also contains a visible global search input named
+                # "keyword", so never use input order as an identity fallback.
+                name_el=input_by_name(d,'completion_name')
+                birth_el=input_by_name(d,'resident_registration')
+                if not name_el:
+                    name_el=next((e for e in ins if any(k in attrs(e) for k in ('name','성명','이름')) and 'keyword' not in attrs(e)),None)
+                if not birth_el:
+                    birth_el=next((e for e in ins if any(k in attrs(e) for k in ('birth','생년','birthday','resident_registration','jumin')) and e is not name_el),None)
                 if name_el and birth_el:
-                    fill(name_el,name);fill(birth_el,birth);click_consent(d);return
+                    fill(name_el,name);fill(birth_el,birth)
+                    set_required_consents(d,'인천','수료조회','policy')
+                    return
             except Exception:continue
         time.sleep(.4)
     raise RuntimeError('인천 이름·생년월일 입력칸을 찾지 못했습니다.')
@@ -1036,7 +1124,7 @@ def completion_lookup(d,region,p:Person,debug:Path,n:int)->CompletionResult:
             try:d.switch_to.default_content()
             except Exception:pass
             d.refresh();WebDriverWait(d,20).until(EC.presence_of_element_located((By.TAG_NAME,'body')))
-        fill_kytti_form(d,p.name,p.resident);submit(d)
+        fill_kytti_form(d,p.name,p.resident,'수료조회');submit(d)
     else:
         fill_incheon_form(d,p.name,p.resident[:6]);submit_incheon_completion(d)
     wait_after_submit(d,old);body,rows=parse_page(d); compact=re.sub(r'\s+','',body)
@@ -1127,6 +1215,15 @@ def visible_result_values(row):
     return '미수료', completion or ('결과없음' if category=='결과없음' else '')
 
 def write_result(input_path:Path,sheet_name:str,header_row:int,df:pd.DataFrame,out:Path):
+    status_colors={
+        '수료':('C6EFCE','006100'),
+        '미수료':('FFC7CE','9C0006'),
+        '제외':('E7E6E6','595959'),
+    }
+    def excel_rgb(hex_color):
+        value=hex_color.lstrip('#')
+        r,g,b=(int(value[i:i+2],16) for i in (0,2,4))
+        return r+(g<<8)+(b<<16)
     # Windows Excel COM 우선: 서식과 .xls 호환 보존
     try:
         import win32com.client
@@ -1144,6 +1241,11 @@ def write_result(input_path:Path,sheet_name:str,header_row:int,df:pd.DataFrame,o
                 if c=='수료여부': value=visible_status
                 elif c=='수료일': value=visible_date
                 ws.Cells(excel_row,headers[c]).Value=value
+            if headers.get('수료여부') and visible_status in status_colors:
+                fill_color,font_color=status_colors[visible_status]
+                status_cell=ws.Cells(excel_row,headers['수료여부'])
+                status_cell.Interior.Color=excel_rgb(fill_color)
+                status_cell.Font.Color=excel_rgb(font_color)
             # 예약 변경으로 갱신된 교육시청일과 비고 사유는 기존 원본 열에 다시 기록한다.
             for c in ('교육시청일','기수','비고'):
                 if c in headers and c in df.columns:
@@ -1174,6 +1276,8 @@ def write_result(input_path:Path,sheet_name:str,header_row:int,df:pd.DataFrame,o
         print('EXCEL_COM_FALLBACK|'+str(e),flush=True)
     # fallback xlsx
     from openpyxl import load_workbook
+    from openpyxl.styles import PatternFill
+    from copy import copy
     src=sanitize_xlsx(input_path)
     if input_path.suffix.lower()=='.xls':
         raise RuntimeError('Excel COM을 사용할 수 없어 .xls 저장이 불가능합니다. Microsoft Excel이 설치된 Windows에서 실행하세요.')
@@ -1189,6 +1293,13 @@ def write_result(input_path:Path,sheet_name:str,header_row:int,df:pd.DataFrame,o
             if c=='수료여부': value=visible_status
             elif c=='수료일': value=visible_date
             ws.cell(er,headers[c],value)
+        if headers.get('수료여부') and visible_status in status_colors:
+            fill_color,font_color=status_colors[visible_status]
+            status_cell=ws.cell(er,headers['수료여부'])
+            status_cell.fill=PatternFill(fill_type='solid',fgColor=fill_color)
+            status_font=copy(status_cell.font)
+            status_font.color=font_color
+            status_cell.font=status_font
         for c in ('교육시청일','기수','비고'):
             if c in headers and c in df.columns:
                 ws.cell(er,headers[c],text(row.get(c,'')))
@@ -1442,7 +1553,9 @@ def row_matches_filters(row,p,date_filter='all',status_filter='all',today=None):
     if date_filter=='due' and not (rd and rd<=today):
         return False
 
-    ex=bool(exclusion_reason(row)) or key=='제외' or cat=='제외'
+    # 제외 여부는 현재 인사/제외 사유와 최종 현황 판정만 사용한다.
+    # 과거 조회에서 남은 '구분=제외' 문구만으로 현재 미수료자를 누락시키지 않는다.
+    ex=bool(exclusion_reason(row)) or key=='제외'
     hold=bool(hold_reason(row)) or cat=='보류'
     is_error=(cat in ('조회오류','결과없음','입력정보부족') or
               any(x in combined for x in ('조회오류','결과없음','입력정보부족','검색결과가없')) or
@@ -1519,7 +1632,7 @@ def summary_counts(df,people):
     return counts
 
 def main():
-    ap=argparse.ArgumentParser();ap.add_argument('input');ap.add_argument('--output');ap.add_argument('--regions',default='서울,경기,인천');ap.add_argument('--headless',action='store_true');ap.add_argument('--browser-mode',choices=['background','normal'],default='background');ap.add_argument('--limit',type=int,default=0);ap.add_argument('--mode',choices=['all','reservation','completion'],default='all');ap.add_argument('--target',choices=['all','unqueried','due','incomplete','incomplete_all','completion_blank','reservation_blank','noresult','error','input_missing','changed_reservation','scheduled_completion','completed','hold','excluded','error_all'],default='all');ap.add_argument('--control-file',default='');ap.add_argument('--date-filter',choices=['all','due'],default='all');ap.add_argument('--status-filter',default='all',help='쉼표로 구분한 복수 상태: completed,incomplete,scheduled,hold,excluded,error 또는 all');args=ap.parse_args()
+    ap=argparse.ArgumentParser();ap.add_argument('input');ap.add_argument('--output');ap.add_argument('--regions',default='서울,경기,인천');ap.add_argument('--headless',action='store_true');ap.add_argument('--browser-mode',choices=['hidden','background','normal'],default='hidden');ap.add_argument('--limit',type=int,default=0);ap.add_argument('--resume-row',type=int,default=-1);ap.add_argument('--mode',choices=['all','reservation','completion'],default='all');ap.add_argument('--target',choices=['all','unqueried','due','incomplete','incomplete_all','completion_blank','reservation_blank','noresult','error','input_missing','changed_reservation','scheduled_completion','completed','hold','excluded','error_all'],default='all');ap.add_argument('--control-file',default='');ap.add_argument('--date-filter',choices=['all','due'],default='all');ap.add_argument('--status-filter',default='all',help='쉼표로 구분한 복수 상태: completed,incomplete,scheduled,hold,excluded,error 또는 all');args=ap.parse_args()
     global BROWSER_MODE
     BROWSER_MODE=args.browser_mode
     # v13: 기본 조회는 수료 중심이다. 예약조회는 UI의 별도 버튼에서만 reservation 모드로 실행한다.
@@ -1586,6 +1699,9 @@ def main():
             return row_matches_filters(df.loc[p.row],p,args.date_filter,args.status_filter,today)
         return row_matches_target(df.loc[p.row],p,args.target,today)
     people=[p for p in all_people if selected(p)]
+    if args.resume_row >= 0:
+        people=[p for p in people if p.row > args.resume_row]
+        print(f'RESUME_FROM_ROW|{args.resume_row}|남은대상={len(people)}',flush=True)
     people=people[:args.limit] if args.limit else people
     print(f'SELECTED|{len(people)}|{args.date_filter}:{args.status_filter}' if (args.date_filter!='all' or args.status_filter!='all') else f'SELECTED|{len(people)}|{args.target}',flush=True)
     regions=[x.strip() for x in args.regions.split(',') if x.strip()]
@@ -1831,7 +1947,7 @@ def main():
                 try:
                     out.parent.mkdir(parents=True,exist_ok=True)
                     write_result(inp,sn,hr,df,out)
-                    print(f'CHECKPOINT|{n}|{len(people)}|{out}',flush=True)
+                    print(f'CHECKPOINT|{n}|{len(people)}|{p.row}|{out}',flush=True)
                 except Exception as checkpoint_error:
                     print(f'ERROR|체크포인트저장|{type(checkpoint_error).__name__}: {checkpoint_error}',flush=True)
             except Exception as person_error:
@@ -1869,7 +1985,7 @@ def main():
                 try:
                     out.parent.mkdir(parents=True,exist_ok=True)
                     write_result(inp,sn,hr,df,out)
-                    print(f'CHECKPOINT|오류후저장|{n}|{len(people)}|{out}',flush=True)
+                    print(f'CHECKPOINT|{n}|{len(people)}|{p.row}|{out}|오류후저장',flush=True)
                 except Exception as checkpoint_error:
                     print(f'ERROR|오류후저장|{type(checkpoint_error).__name__}: {checkpoint_error}',flush=True)
                 driver_close(d); d=None

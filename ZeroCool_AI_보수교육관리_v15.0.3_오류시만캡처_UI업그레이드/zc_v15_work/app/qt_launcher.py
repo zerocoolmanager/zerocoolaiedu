@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 import queue
+import re
 import subprocess
 import sys
 import threading
@@ -31,6 +32,36 @@ DEBUG_DIR = ROOT / "debug"
 RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 DEBUG_DIR.mkdir(parents=True, exist_ok=True)
 
+_RESULT_SUFFIX_RE = re.compile(
+    r"(?:_(?:교육수료조회|3명테스트)"
+    r"(?:_\d{8}(?:_\d{6})?)?(?:-\d+)?)$"
+)
+
+
+def canonical_input_stem(path: str | Path) -> str:
+    """Return the original workbook stem without generated result suffixes."""
+    stem = Path(path).stem
+    while True:
+        cleaned = _RESULT_SUFFIX_RE.sub("", stem)
+        if cleaned == stem:
+            return stem
+        stem = cleaned
+
+
+def next_result_path(input_path: str | Path, suffix: str) -> Path:
+    """Allocate a stable -1, -2 result name without timestamp accumulation."""
+    prefix = f"{canonical_input_stem(input_path)}{suffix}"
+    used = set()
+    pattern = re.compile(rf"^{re.escape(prefix)}-(\d+)\.xlsx$", re.IGNORECASE)
+    for candidate in RESULTS_DIR.glob(f"{prefix}-*.xlsx"):
+        match = pattern.match(candidate.name)
+        if match:
+            used.add(int(match.group(1)))
+    sequence = 1
+    while sequence in used or (RESULTS_DIR / f"{prefix}-{sequence}.xlsx").exists():
+        sequence += 1
+    return RESULTS_DIR / f"{prefix}-{sequence}.xlsx"
+
 
 class LauncherBridge(QObject):
     changed = Signal()
@@ -41,6 +72,8 @@ class LauncherBridge(QObject):
         self._file_path = ""
         self._status = "조회 파일을 선택해 주세요."
         self._log = ""
+        self._result_text = "조회가 끝나면 처리 인원과 결과 파일이 여기에 표시됩니다."
+        self._error_text = "현재 확인할 오류가 없습니다."
         self._progress = 0.0
         self._running = False
         self._active_tab = 0
@@ -55,17 +88,23 @@ class LauncherBridge(QObject):
             "보류": True, "제외": True, "조회오류": True,
         }
         self._queries = {"수료조회": True, "예약조회": True}
-        self._background = False
+        self._background = True
         self._q: queue.Queue[object] = queue.Queue()
         self._proc: subprocess.Popen[str] | None = None
         self._control_file: Path | None = None
         self._started = 0.0
         self._last_output: Path | None = None
         self._pending_followup = False
+        self._phase_index = 0
+        self._phase_total = 1
+        self._phase_name = "수료조회"
         self._pause_requested = False
         self._can_resume = False
         self._last_request: tuple[str, str, int] | None = None
         self._hard_terminated = False
+        self._resume_row = -1
+        self._last_completed = 0
+        self._last_total = 0
         self._timer = QTimer(self)
         self._timer.setInterval(80)
         self._timer.timeout.connect(self._poll)
@@ -74,6 +113,8 @@ class LauncherBridge(QObject):
     def _get_file_path(self): return self._file_path
     def _get_status(self): return self._status
     def _get_log(self): return self._log
+    def _get_result_text(self): return self._result_text
+    def _get_error_text(self): return self._error_text
     def _get_progress(self): return self._progress
     def _get_running(self): return self._running
     def _get_active_tab(self): return self._active_tab
@@ -81,17 +122,25 @@ class LauncherBridge(QObject):
     def _get_counts(self): return self._counts
     def _get_background(self): return self._background
     def _get_can_resume(self): return self._can_resume
+    def _get_region_states(self): return dict(self._regions)
+    def _get_status_states(self): return dict(self._statuses)
+    def _get_query_states(self): return dict(self._queries)
     def _get_selection_summary(self):
         regions = "·".join(name for name, value in self._regions.items() if value) or "기관 미선택"
         queries = " + ".join(name for name, value in self._queries.items() if value) or "조회 항목 미선택"
         selected_statuses = [name for name, value in self._statuses.items() if value]
         scope = "전체 상태" if len(selected_statuses) == len(self._statuses) else "·".join(selected_statuses) or "상태 미선택"
-        browser = "백그라운드" if self._background else "일반 창"
+        browser = "브라우저 완전 숨김" if self._background else "좌측 상단 작은 창"
         return f"{regions}  |  {queries}  |  {scope}  |  {browser}"
+    def _get_all_regions_selected(self): return all(self._regions.values())
+    def _get_all_statuses_selected(self): return all(self._statuses.values())
+    def _get_all_queries_selected(self): return all(self._queries.values())
 
     filePath = Property(str, _get_file_path, notify=changed)
     statusText = Property(str, _get_status, notify=changed)
     logText = Property(str, _get_log, notify=changed)
+    resultText = Property(str, _get_result_text, notify=changed)
+    errorText = Property(str, _get_error_text, notify=changed)
     progress = Property(float, _get_progress, notify=changed)
     running = Property(bool, _get_running, notify=changed)
     activeTab = Property(int, _get_active_tab, notify=changed)
@@ -99,7 +148,13 @@ class LauncherBridge(QObject):
     counts = Property("QVariantMap", _get_counts, notify=changed)
     backgroundMode = Property(bool, _get_background, notify=changed)
     canResume = Property(bool, _get_can_resume, notify=changed)
+    regionStates = Property("QVariantMap", _get_region_states, notify=changed)
+    statusStates = Property("QVariantMap", _get_status_states, notify=changed)
+    queryStates = Property("QVariantMap", _get_query_states, notify=changed)
     selectionSummary = Property(str, _get_selection_summary, notify=changed)
+    allRegionsSelected = Property(bool, _get_all_regions_selected, notify=changed)
+    allStatusesSelected = Property(bool, _get_all_statuses_selected, notify=changed)
+    allQueriesSelected = Property(bool, _get_all_queries_selected, notify=changed)
 
     @Slot()
     def selectFile(self):
@@ -121,6 +176,12 @@ class LauncherBridge(QObject):
             self._regions[name] = not self._regions[name]
             self.changed.emit()
 
+    @Slot()
+    def toggleAllRegions(self):
+        target = not all(self._regions.values())
+        self._regions = {name: target for name in self._regions}
+        self.changed.emit()
+
     @Slot(str, result=bool)
     def statusChecked(self, name):
         return bool(self._statuses.get(name, False))
@@ -131,6 +192,12 @@ class LauncherBridge(QObject):
             self._statuses[name] = not self._statuses[name]
             self.changed.emit()
 
+    @Slot()
+    def toggleAllStatuses(self):
+        target = not all(self._statuses.values())
+        self._statuses = {name: target for name in self._statuses}
+        self.changed.emit()
+
     @Slot(str, result=bool)
     def queryChecked(self, name):
         return bool(self._queries.get(name, False))
@@ -140,6 +207,12 @@ class LauncherBridge(QObject):
         if name in self._queries:
             self._queries[name] = not self._queries[name]
             self.changed.emit()
+
+    @Slot()
+    def toggleAllQueries(self):
+        target = not all(self._queries.values())
+        self._queries = {name: target for name in self._queries}
+        self.changed.emit()
 
     @Slot(bool)
     def setBackgroundMode(self, enabled):
@@ -186,9 +259,11 @@ class LauncherBridge(QObject):
         if self._running or not self._can_resume or not self._last_request:
             return
         mode, target, limit = self._last_request
+        if limit and self._last_total:
+            limit = max(0, self._last_total - self._last_completed)
         self._can_resume = False
         self._append_log("▶ 조회 재개")
-        self._start(mode, target, limit)
+        self._start(mode, target, limit, continuation=True, resuming=True)
 
     @Slot()
     def terminateRun(self):
@@ -242,11 +317,9 @@ class LauncherBridge(QObject):
 
     @Slot()
     def showLastError(self):
-        errors = [line for line in self._log.splitlines() if "ERROR" in line or "오류" in line]
-        self.toastRequested.emit(
-            "최근 오류 진단",
-            "\n".join(errors[-8:]) if errors else "현재 기록된 오류가 없습니다.",
-        )
+        self._update_result_views()
+        self._active_tab = 2
+        self.changed.emit()
 
     @Slot()
     def quitApplication(self):
@@ -302,7 +375,7 @@ class LauncherBridge(QObject):
             self.toastRequested.emit("파일 분석 오류", str(exc))
         self.changed.emit()
 
-    def _start(self, mode: str, target: str, limit: int = 0):
+    def _start(self, mode: str, target: str, limit: int = 0, continuation: bool = False, resuming: bool = False):
         if self._running:
             return self.toastRequested.emit("실행 중", "현재 조회가 진행 중입니다.")
         if not self._file_path or not Path(self._file_path).exists():
@@ -311,18 +384,31 @@ class LauncherBridge(QObject):
         if not regions:
             return self.toastRequested.emit("기관 필요", "조회할 기관을 한 곳 이상 선택해 주세요.")
 
-        if mode == "all":
+        if mode == "all" and not resuming:
             # Keep the same safety rule as launcher_v3: completion and
             # reservation are separate processes, never mixed in one run.
             self._pending_followup = True
+            self._phase_index = 0
+            self._phase_total = 2
             mode = "completion"
+        elif not continuation and not resuming:
+            self._phase_index = 0
+            self._phase_total = 1
+        self._phase_name = "예약조회" if mode == "reservation" else "수료조회"
         self._last_request = (mode, target, limit)
+        if not resuming:
+            self._resume_row = -1
+            self._last_completed = 0
+            self._last_total = 0
         self._pause_requested = False
         self._can_resume = False
         self._hard_terminated = False
         stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         suffix = "_3명테스트" if limit else "_교육수료조회"
-        self._last_output = RESULTS_DIR / f"{Path(self._file_path).stem}{suffix}_{stamp}.xlsx"
+        if not resuming:
+            self._last_output = next_result_path(self._file_path, suffix)
+        elif self._last_output is None:
+            self._last_output = next_result_path(self._file_path, suffix)
         self._control_file = Path(os.environ.get("TEMP", str(BASE))) / f"zerocool_qt_stop_{os.getpid()}_{stamp}.txt"
         self._control_file.unlink(missing_ok=True)
         if FROZEN:
@@ -335,11 +421,13 @@ class LauncherBridge(QObject):
             ]
         cmd += [
             "--regions", ",".join(regions), "--mode", mode, "--target", target,
-            "--browser-mode", "background" if self._background else "normal",
+            "--browser-mode", "hidden" if self._background else "background",
             "--output", str(self._last_output), "--control-file", str(self._control_file),
         ]
         if limit:
             cmd += ["--limit", str(limit)]
+        if resuming and self._resume_row >= 0:
+            cmd += ["--resume-row", str(self._resume_row)]
         status_keys = {
             "수료": "completed", "미수료": "incomplete", "입교예정": "scheduled",
             "보류": "hold", "제외": "excluded", "조회오류": "error",
@@ -349,10 +437,15 @@ class LauncherBridge(QObject):
         ]
         if selected_statuses and len(selected_statuses) != len(self._statuses):
             cmd += ["--status-filter", ",".join(selected_statuses)]
-        self._log = ""
-        self._progress = 0.03
+        if not continuation and not resuming:
+            self._log = ""
+        self._result_text = "조회 중입니다. 완료되면 결과 요약과 파일 경로가 표시됩니다."
+        self._error_text = "조회 중 발견된 오류를 자동으로 모으고 있습니다."
+        self._active_tab = 0
+        self._progress = self._phase_index / self._phase_total
         self._running = True
-        self._started = time.time()
+        if not continuation and not resuming:
+            self._started = time.time()
         self._status = "조회 준비 중..."
         self._append_log(f"● 조회 시작 · {' → '.join(regions)}")
         self._append_log(f"● 조회 항목 · {mode} · 대상 {target}")
@@ -382,6 +475,25 @@ class LauncherBridge(QObject):
         stamp = datetime.now().strftime("%H:%M:%S")
         self._log += ("" if not self._log else "\n") + f"{stamp}   {text}"
 
+    def _update_result_views(self):
+        c = self._counts
+        output = str(self._last_output) if self._last_output else "아직 생성된 결과 파일이 없습니다."
+        self._result_text = (
+            f"전체 대상  {c['total']}명\n"
+            f"수료  {c['completed']}명   ·   입교예정  {c['scheduled']}명\n"
+            f"미수료  {c['incomplete']}명   ·   제외  {c['excluded']}명   ·   조회오류  {c['error']}명\n\n"
+            f"최근 결과 파일\n{output}"
+        )
+        errors = [
+            line for line in self._log.splitlines()
+            if "ERROR|" in line or "조회오류" in line or "실패" in line
+        ]
+        self._error_text = (
+            "\n".join(errors[-80:])
+            if errors else
+            "현재 확인할 오류가 없습니다.\n오류가 생기면 대상자·기관·원인이 이 화면에 모입니다."
+        )
+
     @Slot()
     def _poll(self):
         dirty = False
@@ -401,37 +513,82 @@ class LauncherBridge(QObject):
                     continue
                 code = int(item[1])
                 self._running = False
-                self._progress = 1.0 if code == 0 else self._progress
                 paused = self._pause_requested
                 self._can_resume = paused
                 self._pause_requested = False
+                if paused:
+                    if self._last_output and self._last_output.exists():
+                        self._file_path = str(self._last_output)
+                        self._refresh_file()
+                    self._status = "조회가 일시정지되었습니다. 재개할 수 있습니다."
+                    self._append_log("Ⅱ 조회 일시정지 · 파란색 ‘조회 재개’ 버튼을 누르세요.")
+                    self._update_result_views()
+                    self._active_tab = 0
+                    continue
+                if code == 0:
+                    self._progress = (self._phase_index + 1) / self._phase_total
                 self._status = (
                     "조회가 완료되었습니다." if code == 0 else
-                    "조회가 일시정지되었습니다. 재개할 수 있습니다." if paused else
                     "조회가 중지되었거나 오류가 발생했습니다."
                 )
                 self._append_log(
-                    "✓ 조회 완료" if code == 0 else
-                    "Ⅱ 조회 일시정지" if paused else "■ 조회 종료"
+                    "✓ 조회 완료" if code == 0 else "■ 조회 종료"
                 )
                 if code == 0:
+                    if self._last_output and self._last_output.exists():
+                        # 다음 단계는 앞 단계가 기록한 결과 파일을 이어서 사용한다.
+                        self._file_path = str(self._last_output)
                     self._refresh_file()
                     if self._pending_followup:
                         self._pending_followup = False
+                        self._phase_index = 1
                         self._append_log("● 수료조회 완료 · 예약조회를 별도 프로세스로 시작합니다.")
-                        QTimer.singleShot(250, lambda: self._start("reservation", "all"))
+                        QTimer.singleShot(
+                            250, lambda: self._start("reservation", "all", continuation=True)
+                        )
+                    else:
+                        self._update_result_views()
+                        self._active_tab = 2 if self._counts["error"] else 1
                 else:
                     self._pending_followup = False
+                    self._update_result_views()
+                    self._active_tab = 2
             else:
                 line = str(item)
                 self._append_log(line)
-                if "%" in line:
+                if line.startswith("PROGRESS|"):
+                    try:
+                        _, current, total, *_ = line.split("|")
+                        current_value, total_value = int(current), max(1, int(total))
+                        self._last_completed = max(0, current_value - 1)
+                        self._last_total = total_value
+                        phase_progress = min(1.0, max(0.0, current_value / total_value))
+                        self._progress = (
+                            self._phase_index + phase_progress
+                        ) / self._phase_total
+                        self._status = (
+                            f"{self._phase_name} 진행 중 · "
+                            f"{current_value}/{total_value}명"
+                        )
+                    except (ValueError, IndexError):
+                        pass
+                elif line.startswith("CHECKPOINT|"):
+                    try:
+                        parts = line.split("|")
+                        self._last_completed = int(parts[1])
+                        self._last_total = int(parts[2])
+                        if len(parts) >= 5:
+                            self._resume_row = int(parts[3])
+                    except (ValueError, IndexError):
+                        pass
+                elif "%" in line:
                     for token in line.replace("%", " %").split():
                         if token.isdigit():
                             value = int(token)
                             if 0 <= value <= 100:
                                 self._progress = value / 100
-                self._status = "조회 진행 중..."
+                if not line.startswith("PROGRESS|"):
+                    self._status = f"{self._phase_name} 진행 중..."
         if dirty:
             self.changed.emit()
 
