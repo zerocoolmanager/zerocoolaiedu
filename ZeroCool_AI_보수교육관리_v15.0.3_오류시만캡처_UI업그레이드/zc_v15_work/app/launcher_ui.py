@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import sys
 import tkinter as tk
+from pathlib import Path
 from tkinter import ttk
 
 
@@ -35,6 +36,20 @@ BORDER = "#dfe6ef"
 PALE_BLUE = "#eef6ff"
 PALE_GREEN = "#effaf4"
 PALE_WARN = "#fff6e5"
+ASSET_ROOT = Path(__file__).resolve().parent / "assets" / "fluent" / "png"
+_ICON_CACHE = {}
+
+
+def _fluent(name, color="ink", size=20):
+    """Load a bundled Microsoft Fluent icon and retain its Tk reference."""
+    key = (name, color, size)
+    if key not in _ICON_CACHE:
+        path = ASSET_ROOT / f"{name}_{color}_{size}.png"
+        try:
+            _ICON_CACHE[key] = tk.PhotoImage(file=str(path))
+        except tk.TclError:
+            _ICON_CACHE[key] = None
+    return _ICON_CACHE[key]
 
 
 def apply_windows_chrome(app):
@@ -255,8 +270,9 @@ class MetricCard(tk.Canvas):
                  fill="#f8fbff" if self.hover else SURFACE,
                  outline="#b8d6f6" if self.hover else BORDER)
         self.create_oval(14, 12, 32, 30, fill=self.color, outline="")
-        self.create_text(23, 21, text=self.icon, fill="white",
-                         font=(FONT_KR, 7, "bold"))
+        image = _fluent(self.icon, "white", 16)
+        if image:
+            self.create_image(23, 21, image=image)
         self.create_text(39, 21, text=self.title, anchor="w", fill=INK,
                          font=(FONT_KR, 8, "bold"))
         self.create_text(16, 55, text=self.variable.get(), anchor="w", fill=INK,
@@ -292,18 +308,31 @@ class ToggleChip(tk.Canvas):
                  fill=_blend(self.color, "#ffffff", .92) if selected else "#fafbfd",
                  outline=self.color if selected else BORDER)
         kind = {"입교예정": "calendar", "예약조회": "calendar",
-                "수료조회": "results", "조회오류": "search"}.get(
-                    self.label, "check")
+                "수료조회": "document_text", "조회오류": "error",
+                "미수료": "dismiss_circle", "보류": "pause",
+                "제외": "subtract"}.get(self.label, "check_circle")
         self.create_oval(10, 10, 30, 30,
                          fill=_blend(self.color, "#ffffff", .86), outline="")
-        _icon(self, kind, 12, 12, 16, self.color, 2)
+        color_name = {
+            GREEN: "green", RED: "red", BLUE: "blue", ORANGE: "orange",
+            MUTED: "muted", "#53647b": "muted",
+        }.get(self.color, "ink")
+        image = _fluent(kind, color_name, 16)
+        if image:
+            self.create_image(20, 20, image=image)
+        else:
+            _icon(self, "check", 12, 12, 16, self.color, 2)
         self.create_text(38, 20, text=self.label, anchor="w",
                          fill=self.color if selected else MUTED,
                          font=(FONT_KR, 9, "bold"))
         self.create_oval(width-29, 9, width-9, 29,
                          fill=self.color if selected else "#e7ecf2", outline="")
         if selected:
-            _icon(self, "check", width-28, 10, 18, "white", 2)
+            image = _fluent("check_circle", "white", 16)
+            if image:
+                self.create_image(width-19, 19, image=image)
+            else:
+                _icon(self, "check", width-28, 10, 18, "white", 2)
 
 
 class ActionCard(tk.Canvas):
@@ -349,16 +378,28 @@ class ActionCard(tk.Canvas):
         color = "#c9d2dd" if self.state == "disabled" else self.color
         if self.hover and self.state != "disabled":
             color = _blend(color, "#000000", .10)
-        self.create_rectangle(7, 8, width - 2, height - 1, fill="#dbe3ec", outline="")
+        _rounded(self, 6, 7, width - 2, height - 1, 10,
+                 fill="#dbe3ec", outline="")
         _rounded(self, 1, 1, width - 7, height - 7, 10, fill=color, outline="")
+        self.create_line(12, 2, width - 18, 2,
+                         fill=_blend(color, "#ffffff", .32), width=1)
         icon_y = height / 2 if not self.subtitle else max(25, height * .34)
-        kind = {"선택 조건으로 조회": "search", "오늘 업무": "gear",
-                "조회 결과 보기": "results", "조회 중지": "stop",
+        kind = {"선택 조건으로 조회": "search", "오늘 업무": "settings",
+                "조회 결과 보기": "document_text", "조회 중지": "stop",
                 "조회 재개": "play", "새 조회": "refresh"}.get(self.title, "more")
+        if kind == "refresh":
+            kind = "reset"
+        if kind == "more":
+            kind = "apps"
         compact_control = not self.subtitle
         icon_size = 18 if compact_control else 24
         icon_x = 13 if compact_control else 18
-        _icon(self, kind, icon_x, icon_y-icon_size/2, icon_size, self.fg, 2)
+        image_color = "white" if self.fg == "white" else "ink"
+        image = _fluent(kind, image_color, 20 if compact_control else 24)
+        if image:
+            self.create_image(icon_x + icon_size/2, icon_y, image=image)
+        else:
+            _icon(self, kind, icon_x, icon_y-icon_size/2, icon_size, self.fg, 2)
         title_y = height / 2 if compact_control else max(24, height * .31)
         title_x = 39 if compact_control else 54
         title_font = 9 if compact_control else 11
@@ -397,13 +438,17 @@ def _section_title(master, title, subtitle=None):
 
 
 def _nav_item(master, text, icon, command=None, active=False):
-    return tk.Button(
-        master, text=f"{icon}   {text}", command=command, anchor="w",
+    button = tk.Button(
+        master, text=text, command=command, anchor="w", compound="left",
         relief="flat", bd=0, cursor="hand2", padx=16, pady=10,
         bg=NAV_ACTIVE if active else NAV, fg="white" if active else "#d7e5f5",
         activebackground=NAV_ACTIVE, activeforeground="white",
         font=(FONT_KR, 9, "bold" if active else "normal"),
     )
+    button._icon_active = _fluent(icon, "white", 20)
+    button._icon_normal = _fluent(icon, "white", 20)
+    button.configure(image=button._icon_active if active else button._icon_normal)
+    return button
 
 
 def _build_sidebar(app, master):
@@ -430,14 +475,14 @@ def _build_sidebar(app, master):
     nav = tk.Frame(sidebar, bg=NAV)
     nav.pack(fill="x", padx=12)
     items = [
-        ("대시보드", "▦", app.show_dashboard, True),
-        ("조회 관리", "⌕", app.focus_query_controls, False),
-        ("결과 관리", "▣", app.show_results_view, False),
-        ("대상자 관리", "♙", app.refresh_file, False),
-        ("예약 관리", "▤", app.run_reservation_separate, False),
-        ("통계 분석", "▥", app.show_stats, False),
-        ("설정", "⚙", app.show_more_actions, False),
-        ("시스템 로그", "▧", app.show_log_view, False),
+        ("대시보드", "apps", app.show_dashboard, True),
+        ("조회 관리", "search", app.focus_query_controls, False),
+        ("결과 관리", "document_text", app.show_results_view, False),
+        ("대상자 관리", "people", app.refresh_file, False),
+        ("예약 관리", "calendar", app.run_reservation_separate, False),
+        ("통계 분석", "chart", app.show_stats, False),
+        ("설정", "settings", app.show_more_actions, False),
+        ("시스템 로그", "document", app.show_log_view, False),
     ]
     nav_buttons = []
 
@@ -448,6 +493,8 @@ def _build_sidebar(app, master):
                 bg=NAV_ACTIVE if selected else NAV,
                 fg="white" if selected else "#d7e5f5",
                 font=(FONT_KR, 9, "bold" if selected else "normal"),
+                image=current_button._icon_active if selected
+                else current_button._icon_normal,
             )
         if command:
             command()
@@ -466,8 +513,8 @@ def _build_sidebar(app, master):
     account = tk.Frame(sidebar, bg=NAV_DEEP, padx=12, pady=12,
                        highlightbackground="#17466f", highlightthickness=1)
     account.pack(side="bottom", fill="x", padx=12, pady=(0, 16))
-    tk.Label(account, text="♙", bg="#174d80", fg="white",
-             font=(FONT_KR, 16), width=3).pack(side="left", padx=(0, 10))
+    tk.Label(account, image=_fluent("person", "white", 24), bg="#174d80",
+             width=36, height=36).pack(side="left", padx=(0, 10))
     account_text = tk.Frame(account, bg=NAV_DEEP)
     account_text.pack(side="left")
     tk.Label(account_text, text="관리자", bg=NAV_DEEP, fg="white",
@@ -500,11 +547,11 @@ def _build_header(app, master):
     for key in metric_keys:
         app.vars.setdefault(key, tk.StringVar(value="0"))
     specs = [
-        ("전체 대상자", "전체", BLUE, "Σ"),
-        ("교육수료", "교육수료", GREEN, "✓"),
-        ("입교예정", "입교예정", ORANGE, "▣"),
-        ("미수료", "미수료", PURPLE, "×"),
-        ("조회오류", "조회오류", RED, "!"),
+        ("전체 대상자", "전체", BLUE, "people"),
+        ("교육수료", "교육수료", GREEN, "check_circle"),
+        ("입교예정", "입교예정", ORANGE, "calendar"),
+        ("미수료", "미수료", PURPLE, "dismiss_circle"),
+        ("조회오류", "조회오류", RED, "error"),
     ]
     for index, (title_text, key, color, icon) in enumerate(specs):
         variable = app.vars.setdefault(key, tk.StringVar(value="0"))
@@ -529,7 +576,8 @@ def _build_conditions(app, master):
     entry = ttk.Entry(file_row, textvariable=app.file, font=(FONT_KR, 9))
     entry.pack(side="left", fill="x", expand=True)
     app.file_entry = entry
-    ttk.Button(file_row, text="찾아보기", style="ZC.TButton",
+    ttk.Button(file_row, text="찾아보기", image=_fluent("folder", "ink", 16),
+               compound="left", style="ZC.TButton",
                command=app.pick).pack(side="left", padx=(6, 0))
 
     app.seoul = tk.BooleanVar(value=True)
@@ -608,27 +656,28 @@ def _build_conditions(app, master):
 def _build_actions(app, master):
     panel = _panel(master, 10)
     panel.pack(fill="both", expand=True)
-    guide = tk.Frame(panel, bg=PALE_BLUE, padx=12, pady=7)
+    guide = tk.Frame(panel, bg=PALE_BLUE, padx=12, pady=18, height=118)
     guide.pack(fill="x", pady=(0, 5))
-    tk.Label(guide, text="조회 안내", bg=PALE_BLUE, fg=BLUE,
+    guide.pack_propagate(False)
+    tk.Label(guide, text="  조회 안내", image=_fluent("info", "blue", 20),
+             compound="left", bg=PALE_BLUE, fg=BLUE,
              font=(FONT_KR, 10, "bold")).pack(anchor="w")
     tk.Label(guide, text="선택 조건에 맞는 대상만 빠르게 조회합니다.",
              bg=PALE_BLUE, fg=MUTED, justify="left",
              font=(FONT_KR, 8)).pack(anchor="w", pady=(3, 0))
 
-    ActionCard(master=panel, title="선택 조건으로 조회",
-               subtitle="선택한 조건으로 조회를 시작합니다", icon="◎",
-               command=app.run_filtered, color="#0867e8", height=64).pack(fill="x", pady=3)
-    ActionCard(master=panel, title="오늘 업무",
-               subtitle="오늘 업무를 시작합니다", icon="☼",
-               command=app.one_click_run, color=GREEN, height=64).pack(fill="x", pady=3)
-    ActionCard(master=panel, title="조회 결과 보기",
-               subtitle="조회 결과를 확인합니다", icon="▣",
-               command=app.open_result, color=PURPLE, height=64).pack(fill="x", pady=3)
-    ActionCard(master=panel, title="기타 기능",
-               subtitle="설정 및 기타 기능을 관리합니다", icon="•••",
-               command=app.show_more_actions, color="#edf1f6",
-               fg=INK, height=58).pack(fill="x", pady=3)
+    primary_cards = [
+        ActionCard(panel, "선택 조건으로 조회", "선택한 조건으로 조회를 시작합니다",
+                   "search", app.run_filtered, "#0867e8", height=64),
+        ActionCard(panel, "오늘 업무", "오늘 업무를 시작합니다",
+                   "settings", app.one_click_run, GREEN, height=64),
+        ActionCard(panel, "조회 결과 보기", "조회 결과를 확인합니다",
+                   "document_text", app.open_result, PURPLE, height=64),
+        ActionCard(panel, "기타 기능", "설정 및 기타 기능을 관리합니다",
+                   "apps", app.show_more_actions, "#edf1f6", height=58, fg=INK),
+    ]
+    for card in primary_cards:
+        card.pack(fill="x", pady=3)
 
     controls = tk.Frame(panel, bg=SURFACE)
     controls.pack(fill="x", side="bottom", pady=(7, 0))
@@ -646,6 +695,19 @@ def _build_actions(app, master):
     app.reset_btn = ActionCard(secondary_controls, "새 조회", "", "↺",
                                app.reset_run_state, "#64748b", height=42)
     app.reset_btn.grid(row=0, column=1, sticky="ew", padx=(3, 0), pady=2)
+
+    def apply_responsive_density(event):
+        if event.height >= 720:
+            guide_height, guide_pad, heights = 118, 18, (104, 104, 104, 92)
+        elif event.height >= 620:
+            guide_height, guide_pad, heights = 78, 10, (82, 82, 82, 72)
+        else:
+            guide_height, guide_pad, heights = 58, 6, (64, 64, 64, 58)
+        guide.configure(height=guide_height, pady=guide_pad)
+        for card, height in zip(primary_cards, heights):
+            card.configure(height=height)
+
+    panel.bind("<Configure>", apply_responsive_density, add="+")
     return panel
 
 
@@ -718,14 +780,15 @@ def _build_monitor(app, master):
     app.tree.pack(side="left", fill="both", expand=True)
 
     footer = tk.Frame(panel, bg=SURFACE)
-    footer.pack(fill="x", pady=(12, 0))
-    ttk.Button(footer, text="로그 저장", style="ZC.TButton",
+    footer.pack(fill="x", side="bottom", before=tabs, pady=(10, 0))
+    ttk.Button(footer, text="로그 저장", image=_fluent("save", "ink", 16),
+               compound="left", style="ZC.TButton",
                command=app.save_log).pack(side="left")
-    ttk.Button(footer, text="로그 지우기", style="ZC.TButton",
+    ttk.Button(footer, text="로그 지우기", image=_fluent("delete", "ink", 16),
+               compound="left", style="ZC.TButton",
                command=app.clear_log).pack(side="left", padx=6)
     app.auto_scroll = tk.BooleanVar(value=True)
-    ttk.Checkbutton(footer, text="자동 스크롤",
-                    variable=app.auto_scroll).pack(side="right")
+    CheckChoice(footer, "자동 스크롤", app.auto_scroll, width=110).pack(side="right")
     return panel
 
 
@@ -748,11 +811,13 @@ def build_dashboard_ui(app):
                       highlightbackground=BORDER, highlightthickness=1)
     topbar.pack(fill="x")
     topbar.pack_propagate(False)
-    tk.Button(topbar, text="?  도움말", command=app.show_help,
+    tk.Button(topbar, text="도움말", image=_fluent("help", "ink", 16),
+              compound="left", command=app.show_help,
               bg="#f7f9fc", fg=INK, activebackground="#edf1f6",
               activeforeground=INK, relief="flat", bd=0, cursor="hand2",
               font=(FONT_KR, 8), padx=9, pady=6).pack(side="right", padx=(0, 14))
-    tk.Button(topbar, text="⚙  설정", command=app.show_more_actions,
+    tk.Button(topbar, text="설정", image=_fluent("settings", "ink", 16),
+              compound="left", command=app.show_more_actions,
               bg="#f7f9fc", fg=INK, activebackground="#edf1f6",
               activeforeground=INK, relief="flat", bd=0, cursor="hand2",
               font=(FONT_KR, 8), padx=9, pady=6).pack(side="right")
@@ -779,11 +844,14 @@ def build_dashboard_ui(app):
 
     statusbar = tk.Frame(workspace, bg=SURFACE, height=36,
                          highlightbackground=BORDER, highlightthickness=1)
-    statusbar.pack(fill="x", side="bottom")
+    # Reserve the status strip before the expanding content so it never falls
+    # below the viewport in a non-maximized window.
+    statusbar.pack(fill="x", side="bottom", before=content)
     statusbar.pack_propagate(False)
     tk.Label(statusbar, textvariable=app.header_status, bg=SURFACE, fg=INK,
              font=(FONT_KR, 8)).pack(side="left", padx=20, pady=9)
-    tk.Button(statusbar, text="  ⏻  종료  ", command=app.request_exit,
+    tk.Button(statusbar, text="  종료  ", image=_fluent("power", "red", 16),
+              compound="left", command=app.request_exit,
               bg="#fff3f3", fg=RED, activebackground="#ffe4e4",
               activeforeground=RED, relief="flat", bd=0, cursor="hand2",
               highlightbackground="#ffcaca", highlightthickness=1,
