@@ -57,13 +57,16 @@ def apply_windows_chrome(app):
 
 
 def apply_dashboard_styles(app):
+    # Tk reports fonts in points and follows the Windows DPI scale.  The
+    # dashboard is intentionally denser than a document-style application.
+    app.tk.call("tk", "scaling", 1.12 if app.winfo_screenheight() < 1000 else 1.18)
     style = ttk.Style(app)
     style.theme_use("clam")
-    style.configure(".", font=(FONT_KR, 10), background=BG, foreground=INK)
+    style.configure(".", font=(FONT_KR, 9), background=BG, foreground=INK)
     style.configure("Main.TFrame", background=BG)
     style.configure("White.TFrame", background=SURFACE)
     style.configure(
-        "ZC.TButton", font=(FONT_KR, 9, "bold"), padding=(14, 9),
+        "ZC.TButton", font=(FONT_KR, 9, "bold"), padding=(12, 7),
         background="#f5f7fa", foreground=INK, bordercolor=BORDER,
         borderwidth=1, relief="solid",
     )
@@ -73,7 +76,7 @@ def apply_dashboard_styles(app):
         bordercolor=[("focus", BLUE)],
     )
     style.configure(
-        "Primary.TButton", font=(FONT_KR, 10, "bold"), padding=(15, 9),
+        "Primary.TButton", font=(FONT_KR, 9, "bold"), padding=(12, 7),
         background=BLUE, foreground="white", bordercolor=BLUE,
         borderwidth=1,
     )
@@ -86,7 +89,7 @@ def apply_dashboard_styles(app):
         background=RED, foreground="white", bordercolor=RED,
     )
     style.configure(
-        "TEntry", font=(FONT_KR, 10), fieldbackground=SURFACE, foreground=INK,
+        "TEntry", font=(FONT_KR, 9), fieldbackground=SURFACE, foreground=INK,
         bordercolor="#cfd8e3", lightcolor="#cfd8e3",
         darkcolor="#cfd8e3", padding=(9, 7),
     )
@@ -96,7 +99,7 @@ def apply_dashboard_styles(app):
     )
     style.configure(
         "TCheckbutton", background=SURFACE, foreground=INK,
-        font=(FONT_KR, 9), padding=(4, 3), indicatorcolor=SURFACE,
+        font=(FONT_KR, 9), padding=(3, 2), indicatorcolor=SURFACE,
     )
     style.map(
         "TCheckbutton", background=[("active", SURFACE)],
@@ -108,18 +111,18 @@ def apply_dashboard_styles(app):
     )
     style.configure("TNotebook", background=SURFACE, borderwidth=0)
     style.configure(
-        "TNotebook.Tab", font=(FONT_KR, 9), padding=(14, 8),
+        "TNotebook.Tab", font=(FONT_KR, 8), padding=(13, 6),
         background="#f1f4f8", foreground=MUTED, borderwidth=0,
     )
     style.map(
         "TNotebook.Tab",
         background=[("selected", SURFACE), ("!selected", "#edf1f6")],
         foreground=[("selected", BLUE)],
-        font=[("selected", (FONT_KR, 10, "bold")), ("!selected", (FONT_KR, 9))],
-        padding=[("selected", (19, 11)), ("!selected", (14, 7))],
+        font=[("selected", (FONT_KR, 9, "bold")), ("!selected", (FONT_KR, 8))],
+        padding=[("selected", (17, 9)), ("!selected", (13, 6))],
     )
     style.configure(
-        "Treeview", font=(FONT_KR, 9), rowheight=34, background=SURFACE,
+        "Treeview", font=(FONT_KR, 8), rowheight=29, background=SURFACE,
         fieldbackground=SURFACE, foreground=INK, bordercolor=BORDER,
     )
     style.map(
@@ -127,7 +130,7 @@ def apply_dashboard_styles(app):
         foreground=[("selected", INK)],
     )
     style.configure(
-        "Treeview.Heading", font=(FONT_KR, 9, "bold"), padding=(8, 8),
+        "Treeview.Heading", font=(FONT_KR, 8, "bold"), padding=(7, 6),
         background="#f2f5f9", foreground=INK, bordercolor=BORDER,
     )
 
@@ -143,7 +146,7 @@ def _rounded(canvas, x1, y1, x2, y2, radius, **kwargs):
 
 class MetricCard(tk.Canvas):
     def __init__(self, master, title, variable, color, icon, command=None):
-        super().__init__(master, height=92, bg=BG, highlightthickness=0, bd=0,
+        super().__init__(master, height=84, bg=BG, highlightthickness=0, bd=0,
                          cursor="hand2" if command else "")
         self.title = title
         self.variable = variable
@@ -164,21 +167,21 @@ class MetricCard(tk.Canvas):
     def draw(self):
         self.delete("all")
         width = max(self.winfo_width(), 120)
-        height = max(self.winfo_height(), 88)
+        height = max(self.winfo_height(), 80)
         shadow = "#d8e0ea"
         self.create_rectangle(5, 6, width - 2, height - 2, fill=shadow, outline="")
         _rounded(self, 1, 1, width - 5, height - 6, 12,
                  fill="#f8fbff" if self.hover else SURFACE,
                  outline="#b8d6f6" if self.hover else BORDER)
-        self.create_oval(16, 14, 36, 34, fill=self.color, outline="")
-        self.create_text(26, 24, text=self.icon, fill="white",
+        self.create_oval(14, 12, 32, 30, fill=self.color, outline="")
+        self.create_text(23, 21, text=self.icon, fill="white",
+                         font=(FONT_KR, 7, "bold"))
+        self.create_text(39, 21, text=self.title, anchor="w", fill=INK,
                          font=(FONT_KR, 8, "bold"))
-        self.create_text(45, 24, text=self.title, anchor="w", fill=INK,
-                         font=(FONT_KR, 9, "bold"))
-        self.create_text(18, 61, text=self.variable.get(), anchor="w", fill=INK,
-                         font=(FONT, 23, "bold"))
-        self.create_text(width - 17, 64, text="명", anchor="e", fill=MUTED,
-                         font=(FONT_KR, 8))
+        self.create_text(16, 55, text=self.variable.get(), anchor="w", fill=INK,
+                         font=(FONT, 20, "bold"))
+        self.create_text(width - 15, 58, text="명", anchor="e", fill=MUTED,
+                         font=(FONT_KR, 7))
 
 
 class ToggleChip(tk.Button):
@@ -190,7 +193,7 @@ class ToggleChip(tk.Button):
         self.user_command = command
         super().__init__(
             master, command=self.toggle, relief="flat", bd=0, cursor="hand2",
-            font=(FONT_KR, 9, "bold"), padx=11, pady=9, anchor="w",
+            font=(FONT_KR, 8, "bold"), padx=10, pady=7, anchor="w",
         )
         variable.trace_add("write", lambda *_a: self.sync())
         self.sync()
@@ -215,7 +218,7 @@ class ToggleChip(tk.Button):
 
 
 class ActionCard(tk.Canvas):
-    def __init__(self, master, title, subtitle, icon, command, color, height=108,
+    def __init__(self, master, title, subtitle, icon, command, color, height=92,
                  fg="white", state="normal"):
         super().__init__(master, height=height, bg=SURFACE, highlightthickness=0,
                          bd=0, cursor="hand2")
@@ -259,12 +262,14 @@ class ActionCard(tk.Canvas):
             color = _blend(color, "#000000", .10)
         self.create_rectangle(7, 8, width - 2, height - 1, fill="#dbe3ec", outline="")
         _rounded(self, 1, 1, width - 7, height - 7, 10, fill=color, outline="")
-        self.create_text(25, 32, text=self.icon, anchor="w", fill=self.fg,
-                         font=("Segoe UI Symbol", 21, "bold"))
-        self.create_text(66, 29, text=self.title, anchor="w", fill=self.fg,
-                         font=(FONT_KR, 13, "bold"))
-        self.create_text(66, 58, text=self.subtitle, anchor="w", fill=self.fg,
-                         font=(FONT_KR, 9))
+        icon_y = max(25, height * .34)
+        self.create_text(21, icon_y, text=self.icon, anchor="w", fill=self.fg,
+                         font=("Segoe UI Symbol", 17, "bold"))
+        self.create_text(55, max(24, height * .31), text=self.title,
+                         anchor="w", fill=self.fg, font=(FONT_KR, 11, "bold"))
+        if self.subtitle:
+            self.create_text(55, max(47, height * .60), text=self.subtitle,
+                             anchor="w", fill=self.fg, font=(FONT_KR, 8))
 
 
 def _blend(first, second, amount):
@@ -276,7 +281,7 @@ def _blend(first, second, amount):
     return "#" + "".join(f"{value:02x}" for value in mixed)
 
 
-def _panel(master, padding=14):
+def _panel(master, padding=12):
     return tk.Frame(
         master, bg=SURFACE, padx=padding, pady=padding,
         highlightbackground=BORDER, highlightthickness=1,
@@ -285,43 +290,43 @@ def _panel(master, padding=14):
 
 def _section_title(master, title, subtitle=None):
     row = tk.Frame(master, bg=SURFACE)
-    row.pack(fill="x", pady=(0, 10))
+    row.pack(fill="x", pady=(0, 7))
     tk.Label(row, text=title, bg=SURFACE, fg=INK,
-             font=(FONT_KR, 12, "bold")).pack(side="left")
+             font=(FONT_KR, 10, "bold")).pack(side="left")
     if subtitle:
         tk.Label(row, text=subtitle, bg=SURFACE, fg=MUTED,
                  font=(FONT_KR, 8)).pack(side="right")
-    tk.Frame(master, bg=BORDER, height=1).pack(fill="x", pady=(0, 12))
+    tk.Frame(master, bg=BORDER, height=1).pack(fill="x", pady=(0, 9))
 
 
 def _nav_item(master, text, icon, command=None, active=False):
     return tk.Button(
         master, text=f"{icon}   {text}", command=command, anchor="w",
-        relief="flat", bd=0, cursor="hand2", padx=17, pady=13,
+        relief="flat", bd=0, cursor="hand2", padx=16, pady=10,
         bg=NAV_ACTIVE if active else NAV, fg="white" if active else "#d7e5f5",
         activebackground=NAV_ACTIVE, activeforeground="white",
-        font=(FONT_KR, 10, "bold" if active else "normal"),
+        font=(FONT_KR, 9, "bold" if active else "normal"),
     )
 
 
 def _build_sidebar(app, master):
-    sidebar = tk.Frame(master, width=230, bg=NAV)
+    sidebar = tk.Frame(master, width=218, bg=NAV)
     sidebar.pack(side="left", fill="y")
     sidebar.pack_propagate(False)
 
-    brand = tk.Frame(sidebar, bg=NAV_DEEP, height=78)
+    brand = tk.Frame(sidebar, bg=NAV_DEEP, height=68)
     brand.pack(fill="x")
     brand.pack_propagate(False)
     badge = tk.Label(brand, text="ZC", bg=BLUE, fg="white",
                      font=(FONT, 9, "bold"), width=3, height=1)
-    badge.pack(side="left", padx=(18, 10), pady=18)
+    badge.pack(side="left", padx=(16, 9), pady=15)
     tk.Label(brand, text="ZeroCool AI Professional", bg=NAV_DEEP, fg="white",
-             font=(FONT, 9, "bold")).pack(side="left", pady=25)
+             font=(FONT, 8, "bold")).pack(side="left", pady=21)
 
     product = tk.Frame(sidebar, bg=NAV)
-    product.pack(fill="x", padx=18, pady=(22, 12))
+    product.pack(fill="x", padx=17, pady=(17, 10))
     tk.Label(product, text="ZeroCool AI", bg=NAV, fg="white",
-             font=(FONT, 12, "bold")).pack(side="left")
+             font=(FONT, 10, "bold")).pack(side="left")
     tk.Label(product, text=" Professional ", bg=NAV_ACTIVE, fg="white",
              font=(FONT, 7)).pack(side="left", padx=8)
 
@@ -345,7 +350,7 @@ def _build_sidebar(app, master):
             current_button.configure(
                 bg=NAV_ACTIVE if selected else NAV,
                 fg="white" if selected else "#d7e5f5",
-                font=(FONT_KR, 10, "bold" if selected else "normal"),
+                font=(FONT_KR, 9, "bold" if selected else "normal"),
             )
         if command:
             command()
@@ -380,16 +385,16 @@ def _build_sidebar(app, master):
 
 def _build_header(app, master):
     header = tk.Frame(master, bg=BG)
-    header.pack(fill="x", padx=24, pady=(18, 12))
+    header.pack(fill="x", padx=22, pady=(13, 9))
     title = tk.Frame(header, bg=BG)
     title.pack(side="left")
     tk.Label(title, text="서울 · 경기 · 인천 교육수료 관리", bg=BG, fg=INK,
-             font=(FONT_KR, 21, "bold")).pack(anchor="w")
+             font=(FONT_KR, 18, "bold")).pack(anchor="w")
     tk.Label(title, text="교육수료 및 예약조회 통합 관리 시스템", bg=BG, fg=MUTED,
-             font=(FONT_KR, 9)).pack(anchor="w", pady=(4, 0))
+             font=(FONT_KR, 8)).pack(anchor="w", pady=(3, 0))
 
     metrics = tk.Frame(header, bg=BG)
-    metrics.pack(side="right", fill="x", expand=True, padx=(28, 0))
+    metrics.pack(side="right", fill="x", expand=True, padx=(24, 0))
     metric_keys = (
         "전체", "교육수료", "입교예정", "미수료", "보류", "제외",
         "예약확인필요", "정보변경확인", "결과없음", "조회오류",
@@ -415,16 +420,16 @@ def _build_header(app, master):
 
 
 def _build_conditions(app, master):
-    panel = _panel(master, 16)
+    panel = _panel(master, 12)
     panel.pack(fill="both", expand=True)
     _section_title(panel, "조회 조건 설정")
 
     tk.Label(panel, text="1.  파일 및 기관 선택", bg=SURFACE, fg=BLUE,
-             font=(FONT_KR, 10, "bold")).pack(anchor="w", pady=(0, 8))
+             font=(FONT_KR, 9, "bold")).pack(anchor="w", pady=(0, 6))
     file_row = tk.Frame(panel, bg=SURFACE)
     file_row.pack(fill="x")
     app.file = tk.StringVar()
-    entry = ttk.Entry(file_row, textvariable=app.file, font=(FONT_KR, 10))
+    entry = ttk.Entry(file_row, textvariable=app.file, font=(FONT_KR, 9))
     entry.pack(side="left", fill="x", expand=True)
     app.file_entry = entry
     ttk.Button(file_row, text="찾아보기", style="ZC.TButton",
@@ -436,23 +441,23 @@ def _build_conditions(app, master):
     app.background_mode = tk.BooleanVar(value=True)
     app.ai_priority = tk.BooleanVar(value=False)
     region = tk.Frame(panel, bg=SURFACE)
-    region.pack(fill="x", pady=(10, 4))
+    region.pack(fill="x", pady=(7, 2))
     for label, variable in (("서울", app.seoul), ("경기", app.gg), ("인천", app.incheon)):
         ttk.Checkbutton(region, text=label, variable=variable).pack(side="left", padx=(0, 14))
     ttk.Checkbutton(panel, text="백그라운드 모드 (작은 창)",
-                    variable=app.background_mode).pack(anchor="w", pady=(3, 8))
+                    variable=app.background_mode).pack(anchor="w", pady=(2, 6))
 
     app.alert_var = tk.StringVar(value="미수료·입교예정 대상자를 확인해 주세요.")
     app.alert_bar = tk.Label(panel, textvariable=app.alert_var, bg=PALE_WARN,
                              fg="#885400", font=(FONT_KR, 8), anchor="w",
                              padx=10, pady=9)
-    app.alert_bar.pack(fill="x", pady=(2, 12))
-    tk.Frame(panel, bg=BORDER, height=1).pack(fill="x", pady=(0, 12))
+    app.alert_bar.pack(fill="x", pady=(2, 9))
+    tk.Frame(panel, bg=BORDER, height=1).pack(fill="x", pady=(0, 9))
 
     range_header = tk.Frame(panel, bg=SURFACE)
-    range_header.pack(fill="x", pady=(0, 8))
+    range_header.pack(fill="x", pady=(0, 6))
     tk.Label(range_header, text="2.  조회 범위 (복수 선택 가능)", bg=SURFACE,
-             fg=BLUE, font=(FONT_KR, 10, "bold")).pack(side="left")
+             fg=BLUE, font=(FONT_KR, 9, "bold")).pack(side="left")
     tk.Button(range_header, text="전체 선택", command=app.toggle_all_statuses_button,
               bg="#f5f7fa", fg=INK, relief="flat", bd=0, padx=10, pady=5,
               font=(FONT_KR, 8)).pack(side="right")
@@ -472,11 +477,11 @@ def _build_conditions(app, master):
     status_grid.columnconfigure(0, weight=1)
     status_grid.columnconfigure(1, weight=1)
 
-    tk.Frame(panel, bg=BORDER, height=1).pack(fill="x", pady=12)
+    tk.Frame(panel, bg=BORDER, height=1).pack(fill="x", pady=9)
     query_header = tk.Frame(panel, bg=SURFACE)
-    query_header.pack(fill="x", pady=(0, 8))
+    query_header.pack(fill="x", pady=(0, 6))
     tk.Label(query_header, text="3.  조회 항목 (선택)", bg=SURFACE, fg=BLUE,
-             font=(FONT_KR, 10, "bold")).pack(side="left")
+             font=(FONT_KR, 9, "bold")).pack(side="left")
     tk.Button(query_header, text="전체 선택", command=app.toggle_all_queries_button,
               bg="#f5f7fa", fg=INK, relief="flat", bd=0, padx=10, pady=5,
               font=(FONT_KR, 8)).pack(side="right")
@@ -504,50 +509,51 @@ def _build_conditions(app, master):
 
 
 def _build_actions(app, master):
-    panel = _panel(master, 17)
+    panel = _panel(master, 12)
     panel.pack(fill="both", expand=True)
-    guide = tk.Frame(panel, bg=PALE_BLUE, padx=16, pady=16)
-    guide.pack(fill="x", pady=(0, 14))
+    guide = tk.Frame(panel, bg=PALE_BLUE, padx=13, pady=12)
+    guide.pack(fill="x", pady=(0, 8))
     tk.Label(guide, text="☼  조회 안내", bg=PALE_BLUE, fg=BLUE,
-             font=(FONT_KR, 12, "bold")).pack(anchor="w")
+             font=(FONT_KR, 10, "bold")).pack(anchor="w")
     tk.Label(guide, text="선택한 조건에 맞는 대상만 조회하여\n빠르고 정확한 결과를 제공합니다.",
              bg=PALE_BLUE, fg=MUTED, justify="left",
-             font=(FONT_KR, 9)).pack(anchor="w", pady=(12, 0))
+             font=(FONT_KR, 8)).pack(anchor="w", pady=(8, 0))
 
     ActionCard(master=panel, title="선택 조건으로 조회",
                subtitle="선택한 조건으로 조회를 시작합니다", icon="◎",
-               command=app.run_filtered, color="#0867e8").pack(fill="x", pady=7)
+               command=app.run_filtered, color="#0867e8").pack(fill="x", pady=4)
     ActionCard(master=panel, title="오늘 업무",
                subtitle="오늘 업무를 시작합니다", icon="☼",
-               command=app.one_click_run, color=GREEN).pack(fill="x", pady=7)
+               command=app.one_click_run, color=GREEN).pack(fill="x", pady=4)
     ActionCard(master=panel, title="조회 결과 보기",
                subtitle="조회 결과를 확인합니다", icon="▣",
-               command=app.open_result, color=PURPLE).pack(fill="x", pady=7)
+               command=app.open_result, color=PURPLE).pack(fill="x", pady=4)
     ActionCard(master=panel, title="기타 기능",
                subtitle="설정 및 기타 기능을 관리합니다", icon="•••",
                command=app.show_more_actions, color="#edf1f6",
-               fg=INK).pack(fill="x", pady=7)
+               fg=INK).pack(fill="x", pady=4)
 
     controls = tk.Frame(panel, bg=SURFACE)
-    controls.pack(fill="x", side="bottom", pady=(12, 0))
+    controls.pack(fill="x", side="bottom", pady=(7, 0))
     app.stop_btn = ActionCard(controls, "조회 중지", "", "■", app.stop, RED,
-                              height=44)
-    app.stop_btn.pack(fill="x", pady=3)
+                              height=36)
+    app.stop_btn.pack(fill="x", pady=2)
     secondary_controls = tk.Frame(controls, bg=SURFACE)
     secondary_controls.pack(fill="x")
     secondary_controls.columnconfigure(0, weight=1)
     secondary_controls.columnconfigure(1, weight=1)
     app.resume_btn = ActionCard(secondary_controls, "중지된 조회 재개", "", "▶",
-                                app.resume_run, BLUE, height=44, state="disabled")
-    app.resume_btn.grid(row=0, column=0, sticky="ew", padx=(0, 3), pady=3)
-    app.reset_btn = ActionCard(secondary_controls, "새 조회 준비", "", "↺",
-                               app.reset_run_state, "#64748b", height=44)
-    app.reset_btn.grid(row=0, column=1, sticky="ew", padx=(3, 0), pady=3)
+                                app.resume_run, BLUE, height=36, state="disabled")
+    app.resume_btn.title = "조회 재개"
+    app.resume_btn.grid(row=0, column=0, sticky="ew", padx=(0, 3), pady=2)
+    app.reset_btn = ActionCard(secondary_controls, "새 조회", "", "↺",
+                               app.reset_run_state, "#64748b", height=36)
+    app.reset_btn.grid(row=0, column=1, sticky="ew", padx=(3, 0), pady=2)
     return panel
 
 
 def _build_monitor(app, master):
-    panel = _panel(master, 16)
+    panel = _panel(master, 12)
     panel.pack(fill="both", expand=True)
     app.ptext = tk.StringVar(value="대기 중")
     _section_title(panel, "조회 진행 현황")
@@ -577,7 +583,7 @@ def _build_monitor(app, master):
     app.result_frame = result_frame
 
     app.log = tk.Text(
-        log_frame, font=("Cascadia Mono", 10), bg="#062442", fg="#eef7ff",
+        log_frame, font=("Cascadia Mono", 9), bg="#062442", fg="#eef7ff",
         insertbackground="white", selectbackground=BLUE, wrap="word",
         relief="flat", padx=12, pady=12,
     )
@@ -640,24 +646,24 @@ def build_dashboard_ui(app):
 
     workspace = tk.Frame(shell, bg=BG)
     workspace.pack(side="left", fill="both", expand=True)
-    topbar = tk.Frame(workspace, bg="#f7f9fc", height=46,
+    topbar = tk.Frame(workspace, bg="#f7f9fc", height=40,
                       highlightbackground=BORDER, highlightthickness=1)
     topbar.pack(fill="x")
     topbar.pack_propagate(False)
     tk.Button(topbar, text="?  도움말", command=app.show_help,
               bg="#f7f9fc", fg=INK, activebackground="#edf1f6",
               activeforeground=INK, relief="flat", bd=0, cursor="hand2",
-              font=(FONT_KR, 9), padx=10, pady=8).pack(side="right", padx=(0, 14))
+              font=(FONT_KR, 8), padx=9, pady=6).pack(side="right", padx=(0, 14))
     tk.Button(topbar, text="⚙  설정", command=app.show_more_actions,
               bg="#f7f9fc", fg=INK, activebackground="#edf1f6",
               activeforeground=INK, relief="flat", bd=0, cursor="hand2",
-              font=(FONT_KR, 9), padx=10, pady=8).pack(side="right")
+              font=(FONT_KR, 8), padx=9, pady=6).pack(side="right")
 
     app.header_status = tk.StringVar(value="준비")
     _build_header(app, workspace)
 
     content = tk.Frame(workspace, bg=BG)
-    content.pack(fill="both", expand=True, padx=18, pady=(0, 14))
+    content.pack(fill="both", expand=True, padx=16, pady=(0, 10))
     content.grid_columnconfigure(0, weight=4, uniform="dashboard")
     content.grid_columnconfigure(1, weight=3, uniform="dashboard")
     content.grid_columnconfigure(2, weight=6, uniform="dashboard")
@@ -673,16 +679,16 @@ def build_dashboard_ui(app):
     _build_actions(app, actions)
     _build_monitor(app, monitor)
 
-    statusbar = tk.Frame(workspace, bg=SURFACE, height=42,
+    statusbar = tk.Frame(workspace, bg=SURFACE, height=36,
                          highlightbackground=BORDER, highlightthickness=1)
     statusbar.pack(fill="x", side="bottom")
     statusbar.pack_propagate(False)
     tk.Label(statusbar, textvariable=app.header_status, bg=SURFACE, fg=INK,
-             font=(FONT_KR, 8)).pack(side="left", padx=22, pady=12)
+             font=(FONT_KR, 8)).pack(side="left", padx=20, pady=9)
     tk.Button(statusbar, text="  ⏻  종료  ", command=app.request_exit,
               bg="#fff3f3", fg=RED, activebackground="#ffe4e4",
               activeforeground=RED, relief="flat", bd=0, cursor="hand2",
               highlightbackground="#ffcaca", highlightthickness=1,
-              font=(FONT_KR, 9, "bold"), padx=12, pady=6).pack(
-                  side="right", padx=18, pady=5
+              font=(FONT_KR, 8, "bold"), padx=10, pady=4).pack(
+                  side="right", padx=16, pady=4
               )
