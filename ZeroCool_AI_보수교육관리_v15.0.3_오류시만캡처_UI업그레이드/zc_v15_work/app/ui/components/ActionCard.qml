@@ -50,22 +50,44 @@ Button {
                 }
             }
         }
+        Rectangle {
+            visible: root.tonal || root.quiet
+            width: 3
+            height: parent.height - 20
+            radius: 2
+            anchors.left: parent.left
+            anchors.leftMargin: 5
+            anchors.verticalCenter: parent.verticalCenter
+            color: root.quiet ? "#8ca0b7" : root.accent
+            opacity: .9
+        }
     }
 
     contentItem: Row {
         spacing: root.narrow ? 9 : 14
         leftPadding: root.narrow ? 12 : 19
         rightPadding: root.narrow ? 10 : 16
-        FluentIcon {
-            name: root.iconName
-            tone: root.iconTone
-            iconSize: root.narrow ? 20 : 24
+        Rectangle {
+            width: root.narrow ? 30 : 38
+            height: width
+            radius: root.narrow ? 9 : 11
             anchors.verticalCenter: parent.verticalCenter
+            color: root.quiet ? "#ffffff"
+                 : root.tonal ? Qt.rgba(root.accent.r, root.accent.g, root.accent.b, .12)
+                 : "#26ffffff"
+            border.width: root.quiet || root.tonal ? 1 : 0
+            border.color: root.quiet ? "#d9e1e9" : Qt.rgba(root.accent.r, root.accent.g, root.accent.b, .2)
+            FluentIcon {
+                anchors.centerIn: parent
+                name: root.iconName
+                tone: root.iconTone
+                iconSize: root.narrow ? 18 : 20
+            }
         }
         Column {
             spacing: 6
             anchors.verticalCenter: parent.verticalCenter
-            width: parent.width - (root.narrow ? 41 : 58)
+            width: parent.width - (root.narrow ? 50 : 66)
             Text {
                 text: root.title
                 color: root.quiet ? "#132a49" : (root.tonal ? root.accent2 : "white")

@@ -9,8 +9,8 @@ ApplicationWindow {
     id: window
     width: 1536
     height: 1024
-    minimumWidth: 1080
-    minimumHeight: 720
+    minimumWidth: 980
+    minimumHeight: 660
     visible: true
     title: "ZeroCool AI · 서울·경기·인천 교육수료 관리 v15.0.3"
     color: "#f4f7fb"
@@ -19,8 +19,11 @@ ApplicationWindow {
     readonly property color blue: "#0f6cbd"
     readonly property color ink: "#10233f"
     readonly property color muted: "#64748b"
-    readonly property int gutter: width < 1280 ? 12 : 16
-    readonly property bool compact: width < 1380 || height < 800
+    readonly property bool small: width < 1180
+    readonly property bool compact: width < 1400 || height < 820
+    readonly property real density: small ? .82 : (compact ? .9 : 1)
+    readonly property int gutter: small ? 8 : (compact ? 11 : 16)
+    readonly property int panelPadding: small ? 9 : (compact ? 11 : 14)
 
     MessageDialog {
         id: infoDialog
@@ -338,8 +341,8 @@ ApplicationWindow {
 
             RowLayout {
                 Layout.fillWidth: true
-                Layout.preferredHeight: compact ? 88 : 98
-                spacing: 16
+                Layout.preferredHeight: small ? 76 : (compact ? 86 : 98)
+                spacing: small ? 9 : 16
                 Column {
                     Layout.fillWidth: true
                     Layout.minimumWidth: 310
@@ -348,7 +351,7 @@ ApplicationWindow {
                         text: "서울 · 경기 · 인천 교육수료 관리"
                         color: window.ink
                         font.family: "Segoe UI"
-                        font.pixelSize: compact ? 24 : 27
+                        font.pixelSize: small ? 20 : (compact ? 23 : 27)
                         font.weight: Font.DemiBold
                     }
                     Text {
@@ -361,7 +364,7 @@ ApplicationWindow {
                 RowLayout {
                     Layout.fillWidth: true
                     Layout.maximumWidth: 760
-                    spacing: 10
+                    spacing: small ? 6 : 10
                     MetricCard { Layout.fillWidth: true; label: "전체 대상자"; value: String(backend.counts.total || 0); iconName: "people"; tone: "blue" }
                     MetricCard { Layout.fillWidth: true; label: "교육수료"; value: String(backend.counts.completed || 0); iconName: "check_circle"; tone: "green" }
                     MetricCard { Layout.fillWidth: true; label: "입교예정"; value: String(backend.counts.scheduled || 0); iconName: "calendar"; tone: "orange" }
@@ -376,7 +379,7 @@ ApplicationWindow {
                 spacing: window.gutter
 
                 Rectangle {
-                    Layout.preferredWidth: compact ? 300 : 390
+                    Layout.preferredWidth: small ? 272 : (compact ? 308 : 390)
                     Layout.fillHeight: true
                     radius: 10
                     color: "white"
@@ -385,12 +388,12 @@ ApplicationWindow {
 
                     ScrollView {
                         anchors.fill: parent
-                        anchors.margins: 14
+                        anchors.margins: window.panelPadding
                         clip: true
                         ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
                         Column {
                             width: parent.width
-                            spacing: 13
+                            spacing: window.small ? 8 : (window.compact ? 10 : 13)
                             Text {
                                 text: "조회 조건 설정"
                                 color: window.ink
@@ -533,18 +536,20 @@ ApplicationWindow {
                                 font.pixelSize: 13
                                 font.weight: Font.DemiBold
                             }
-                            Row {
+                            Grid {
                                 width: parent.width
-                                spacing: 8
+                                columns: window.compact ? 1 : 2
+                                columnSpacing: 8
+                                rowSpacing: 7
                                 CheckPill {
-                                    width: (parent.width - 8) / 2
+                                    width: window.compact ? parent.width : (parent.width - 8) / 2
                                     label: "수료조회"; subtitle: "실제 수료 여부 확인"
                                     iconName: "board"; accent: "#169b55"
                                     checkedValue: backend.queryChecked(label) && backend.statusText.length >= 0
                                     onClicked: backend.toggleQuery(label)
                                 }
                                 CheckPill {
-                                    width: (parent.width - 8) / 2
+                                    width: window.compact ? parent.width : (parent.width - 8) / 2
                                     label: "예약조회"; subtitle: "예약 일정 확인"
                                     iconName: "calendar"; accent: "#0f6cbd"
                                     checkedValue: backend.queryChecked(label) && backend.statusText.length >= 0
@@ -572,7 +577,7 @@ ApplicationWindow {
                 }
 
                 Rectangle {
-                    Layout.preferredWidth: compact ? 210 : 276
+                    Layout.preferredWidth: small ? 200 : (compact ? 218 : 276)
                     Layout.fillHeight: true
                     radius: 10
                     color: "white"
@@ -580,8 +585,8 @@ ApplicationWindow {
                     border.width: 1
                     Column {
                         anchors.fill: parent
-                        anchors.margins: 14
-                        spacing: compact ? 12 : 16
+                        anchors.margins: window.panelPadding
+                        spacing: small ? 7 : (compact ? 10 : 16)
                         Rectangle {
                             width: parent.width
                             height: compact ? 104 : 124
@@ -610,11 +615,12 @@ ApplicationWindow {
                         }
                         ActionCard {
                             width: parent.width
-                            height: compact ? 68 : 100
+                            height: small ? 56 : (compact ? 66 : 100)
                             accent: backend.running ? "#e68a00" : (backend.canResume ? "#1578d4" : "#1671e8")
                             accent2: backend.running ? "#d97706" : (backend.canResume ? "#0f64b4" : "#075ed8")
                             iconName: backend.running ? "pause" : "play"
-                            title: backend.running ? "조회 일시정지" : (backend.canResume ? "조회 재개" : "선택 조건으로 조회")
+                            title: backend.running ? (small ? "일시정지" : "조회 일시정지")
+                                   : (backend.canResume ? "조회 재개" : (small ? "선택 조회" : "선택 조건으로 조회"))
                             subtitle: compact ? "" : (backend.running ? "현재 작업을 정리한 뒤 멈춥니다"
                                       : (backend.canResume ? "중단된 조건으로 다시 시작합니다" : "선택한 조건으로 조회를 시작합니다"))
                             onClicked: {
@@ -625,7 +631,7 @@ ApplicationWindow {
                         }
                         ActionCard {
                             width: parent.width
-                            height: compact ? 68 : 100
+                            height: small ? 56 : (compact ? 66 : 100)
                             accent: "#1aa25b"; accent2: "#13884a"
                             tonal: true
                             iconTone: "green"
@@ -637,17 +643,17 @@ ApplicationWindow {
                         }
                         ActionCard {
                             width: parent.width
-                            height: compact ? 68 : 100
+                            height: small ? 56 : (compact ? 66 : 100)
                             accent: "#7550c7"; accent2: "#6038b3"
                             tonal: true
                             iconTone: "purple"
-                            iconName: "document_text"; title: "조회 결과 보기"
+                            iconName: "document_text"; title: small ? "조회 결과" : "조회 결과 보기"
                             subtitle: compact ? "" : "최근 조회 결과를 확인합니다"
                             onClicked: backend.openResults()
                         }
                         ActionCard {
                             width: parent.width
-                            height: compact ? 62 : 88
+                            height: small ? 52 : (compact ? 60 : 88)
                             quiet: true
                             iconName: "settings"; title: "기타 기능"
                             subtitle: compact ? "" : "설정 및 보조 기능을 관리합니다"
@@ -657,7 +663,7 @@ ApplicationWindow {
                         Button {
                             id: stopButton
                             width: parent.width
-                            height: 46
+                            height: small ? 40 : 46
                             enabled: backend.running || backend.canResume
                             hoverEnabled: true
                             focusPolicy: Qt.StrongFocus
@@ -693,8 +699,8 @@ ApplicationWindow {
                     border.width: 1
                     Column {
                         anchors.fill: parent
-                        anchors.margins: 14
-                        spacing: 11
+                        anchors.margins: window.panelPadding
+                        spacing: small ? 7 : 11
                         Row {
                             width: parent.width
                             Text {
