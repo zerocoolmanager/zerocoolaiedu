@@ -47,7 +47,7 @@ class LauncherBridge(QObject):
         self._elapsed = "00:00:00"
         self._counts = {
             "total": 0, "completed": 0, "scheduled": 0,
-            "incomplete": 0, "error": 0,
+            "incomplete": 0, "excluded": 0, "error": 0,
         }
         self._regions = {"서울": True, "경기": True, "인천": True}
         self._statuses = {
@@ -275,7 +275,10 @@ class LauncherBridge(QObject):
             )
             _, _, df = read_input(Path(self._file_path))
             normalize_manual_result_rows(df)
-            counts = {k: 0 for k in ("total", "completed", "scheduled", "incomplete", "error")}
+            counts = {
+                k: 0 for k in
+                ("total", "completed", "scheduled", "incomplete", "excluded", "error")
+            }
             people = people_from_df(df)
             counts["total"] = len(people)
             for person in people:
@@ -288,6 +291,8 @@ class LauncherBridge(QObject):
                     counts["scheduled"] += 1
                 elif key == "미수료":
                     counts["incomplete"] += 1
+                elif key == "제외":
+                    counts["excluded"] += 1
                 if key == "조회오류" or category == "조회오류":
                     counts["error"] += 1
             self._counts = counts

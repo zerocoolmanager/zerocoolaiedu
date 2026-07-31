@@ -8,6 +8,7 @@ Item {
     property string iconName: "people"
     property string tone: "blue"
     property color accent: "#0f6cbd"
+    readonly property bool narrow: width < 112
     implicitWidth: 128
     implicitHeight: 76
 
@@ -30,37 +31,39 @@ Item {
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.top: parent.top
-            anchors.margins: 12
-            spacing: 7
-            FluentIcon { name: root.iconName; tone: root.tone; iconSize: 16 }
+            anchors.margins: root.narrow ? 8 : 12
+            spacing: root.narrow ? 4 : 7
+            FluentIcon { name: root.iconName; tone: root.tone; iconSize: root.narrow ? 14 : 16 }
             Text {
                 text: root.label
                 color: "#243a58"
                 font.family: "Segoe UI"
-                font.pixelSize: 11
+                font.pixelSize: root.narrow ? 9 : 11
                 font.weight: Font.DemiBold
+                elide: Text.ElideRight
+                width: parent.width - (root.narrow ? 18 : 24)
             }
         }
         Text {
             anchors.left: parent.left
             anchors.bottom: parent.bottom
-            anchors.leftMargin: 14
-            anchors.bottomMargin: 10
+            anchors.leftMargin: root.narrow ? 9 : 14
+            anchors.bottomMargin: root.narrow ? 9 : 10
             text: root.value
             color: "#091d3a"
             font.family: "Segoe UI"
-            font.pixelSize: 26
+            font.pixelSize: root.narrow ? 21 : 26
             font.weight: Font.DemiBold
         }
         Text {
             anchors.right: parent.right
             anchors.bottom: parent.bottom
-            anchors.rightMargin: 13
-            anchors.bottomMargin: 13
+            anchors.rightMargin: root.narrow ? 8 : 13
+            anchors.bottomMargin: root.narrow ? 11 : 13
             text: "명"
             color: "#68768c"
             font.family: "Segoe UI"
-            font.pixelSize: 10
+            font.pixelSize: root.narrow ? 8 : 10
         }
     }
 }

@@ -363,13 +363,14 @@ ApplicationWindow {
                 }
                 RowLayout {
                     Layout.fillWidth: true
-                    Layout.maximumWidth: 760
+                    Layout.maximumWidth: 880
                     spacing: small ? 6 : 10
-                    MetricCard { Layout.fillWidth: true; label: "전체 대상자"; value: String(backend.counts.total || 0); iconName: "people"; tone: "blue" }
-                    MetricCard { Layout.fillWidth: true; label: "교육수료"; value: String(backend.counts.completed || 0); iconName: "check_circle"; tone: "green" }
-                    MetricCard { Layout.fillWidth: true; label: "입교예정"; value: String(backend.counts.scheduled || 0); iconName: "calendar"; tone: "orange" }
-                    MetricCard { Layout.fillWidth: true; label: "미수료"; value: String(backend.counts.incomplete || 0); iconName: "dismiss_circle"; tone: "purple" }
-                    MetricCard { Layout.fillWidth: true; label: "조회오류"; value: String(backend.counts.error || 0); iconName: "error"; tone: "red" }
+                    MetricCard { Layout.fillWidth: true; Layout.minimumWidth: 82; label: "전체 대상자"; value: String(backend.counts.total || 0); iconName: "people"; tone: "blue" }
+                    MetricCard { Layout.fillWidth: true; Layout.minimumWidth: 82; label: "교육수료"; value: String(backend.counts.completed || 0); iconName: "check_circle"; tone: "green" }
+                    MetricCard { Layout.fillWidth: true; Layout.minimumWidth: 82; label: "입교예정"; value: String(backend.counts.scheduled || 0); iconName: "calendar"; tone: "orange" }
+                    MetricCard { Layout.fillWidth: true; Layout.minimumWidth: 82; label: "미수료"; value: String(backend.counts.incomplete || 0); iconName: "dismiss_circle"; tone: "purple" }
+                    MetricCard { Layout.fillWidth: true; Layout.minimumWidth: 82; label: "제외"; value: String(backend.counts.excluded || 0); iconName: "subtract"; tone: "muted" }
+                    MetricCard { Layout.fillWidth: true; Layout.minimumWidth: 82; label: "조회오류"; value: String(backend.counts.error || 0); iconName: "error"; tone: "red" }
                 }
             }
 
