@@ -29,7 +29,7 @@ URLS={
 from history_store import person_key, row_fingerprint, get_state, note_seen, save_query
 
 OUT_COLS=['예약일','교육방식','사이트','예약상태','수료여부','수료일','구분','교육종류','교육장소','예약조회내용','수료조회내용','최종조회일시']
-APP_VERSION='15.0.10'
+APP_VERSION='15.0.11'
 SEOUL_ONLINE_SCHEDULE_2026={1:'2026-07-26',2:'2026-07-27',3:'2026-08-10',4:'2026-08-11'}
 
 REGION_COLUMN_NAMES=[
@@ -1632,9 +1632,19 @@ def summary_counts(df,people):
     return counts
 
 def main():
-    ap=argparse.ArgumentParser();ap.add_argument('input');ap.add_argument('--output');ap.add_argument('--regions',default='서울,경기,인천');ap.add_argument('--headless',action='store_true');ap.add_argument('--browser-mode',choices=['hidden','background','normal'],default='hidden');ap.add_argument('--limit',type=int,default=0);ap.add_argument('--resume-row',type=int,default=-1);ap.add_argument('--mode',choices=['all','reservation','completion'],default='all');ap.add_argument('--target',choices=['all','unqueried','due','incomplete','incomplete_all','completion_blank','reservation_blank','noresult','error','input_missing','changed_reservation','scheduled_completion','completed','hold','excluded','error_all'],default='all');ap.add_argument('--control-file',default='');ap.add_argument('--date-filter',choices=['all','due'],default='all');ap.add_argument('--status-filter',default='all',help='쉼표로 구분한 복수 상태: completed,incomplete,scheduled,hold,excluded,error 또는 all');args=ap.parse_args()
+    ap=argparse.ArgumentParser();ap.add_argument('input',nargs='?');ap.add_argument('--output');ap.add_argument('--regions',default='서울,경기,인천');ap.add_argument('--headless',action='store_true');ap.add_argument('--browser-mode',choices=['hidden','background','normal'],default='hidden');ap.add_argument('--diagnose-driver',action='store_true');ap.add_argument('--limit',type=int,default=0);ap.add_argument('--resume-row',type=int,default=-1);ap.add_argument('--mode',choices=['all','reservation','completion'],default='all');ap.add_argument('--target',choices=['all','unqueried','due','incomplete','incomplete_all','completion_blank','reservation_blank','noresult','error','input_missing','changed_reservation','scheduled_completion','completed','hold','excluded','error_all'],default='all');ap.add_argument('--control-file',default='');ap.add_argument('--date-filter',choices=['all','due'],default='all');ap.add_argument('--status-filter',default='all',help='쉼표로 구분한 복수 상태: completed,incomplete,scheduled,hold,excluded,error 또는 all');args=ap.parse_args()
     global BROWSER_MODE
     BROWSER_MODE=args.browser_mode
+    if args.diagnose_driver:
+        diagnostic_driver=None
+        try:
+            diagnostic_driver=driver_new(args.headless)
+            print('DRIVER_DIAGNOSTIC|Chrome WebDriver 생성 성공',flush=True)
+        finally:
+            driver_close(diagnostic_driver)
+        return
+    if not args.input:
+        ap.error('조회할 Excel 파일 경로가 필요합니다.')
     # v13: 기본 조회는 수료 중심이다. 예약조회는 UI의 별도 버튼에서만 reservation 모드로 실행한다.
     # 과거 실행 인자 all은 안전을 위해 completion으로 해석하여 두 기능이 한 번에 섞이지 않게 한다.
     if args.mode == 'all':

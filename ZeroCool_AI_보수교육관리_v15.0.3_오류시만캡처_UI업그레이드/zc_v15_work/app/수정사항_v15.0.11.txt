@@ -1,0 +1,6 @@
+ZeroCool AI 교육조회 v15.0.11
+
+- EXE 작업 프로세스에서 Chrome WebDriver 모듈을 찾지 못하던 패키징 오류 수정
+- selenium.webdriver.chrome.webdriver를 포함한 Selenium 전체 동적 하위 모듈 포함
+- 배포 후 Chrome 조회 시작 단계에서 발생하던 ModuleNotFoundError 방지
+- 개인정보 제출 없이 Chrome 세션 생성 여부를 확인하는 자체 드라이버 진단 추가

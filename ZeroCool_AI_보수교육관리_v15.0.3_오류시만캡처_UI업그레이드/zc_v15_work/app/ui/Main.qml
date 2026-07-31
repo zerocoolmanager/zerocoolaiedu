@@ -12,7 +12,7 @@ ApplicationWindow {
     minimumWidth: 980
     minimumHeight: 660
     visible: true
-    title: "ZeroCool AI · 서울·경기·인천 교육수료 관리 v15.0.10"
+    title: "ZeroCool AI · 서울·경기·인천 교육수료 관리 v15.0.11"
     color: "#f4f7fb"
 
     readonly property color navy: "#f3f6f9"
