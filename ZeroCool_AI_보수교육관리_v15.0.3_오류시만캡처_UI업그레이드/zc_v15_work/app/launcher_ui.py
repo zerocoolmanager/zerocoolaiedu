@@ -13,7 +13,7 @@ from tkinter import ttk
 
 
 FONT = "Segoe UI"
-FONT_KR = "맑은 고딕"
+FONT_KR = "Malgun Gothic"
 NAV = "#06264a"
 NAV_DEEP = "#041d38"
 NAV_ACTIVE = "#0f5cc0"
@@ -144,6 +144,87 @@ def _rounded(canvas, x1, y1, x2, y2, radius, **kwargs):
     return canvas.create_polygon(points, smooth=True, splinesteps=24, **kwargs)
 
 
+def _icon(canvas, kind, x, y, size, color, width=2):
+    """Draw font-independent vector icons with a consistent stroke."""
+    scale = size / 24
+    p = lambda value: value * scale
+    if kind == "check":
+        canvas.create_line(x+p(5), y+p(12), x+p(10), y+p(17), x+p(20), y+p(7),
+                           fill=color, width=width, capstyle="round",
+                           joinstyle="round")
+    elif kind == "search":
+        canvas.create_oval(x+p(4), y+p(4), x+p(16), y+p(16),
+                           outline=color, width=width)
+        canvas.create_line(x+p(15), y+p(15), x+p(21), y+p(21),
+                           fill=color, width=width, capstyle="round")
+    elif kind == "calendar":
+        canvas.create_rectangle(x+p(4), y+p(6), x+p(20), y+p(20),
+                                outline=color, width=width)
+        canvas.create_line(x+p(4), y+p(10), x+p(20), y+p(10),
+                           fill=color, width=width)
+        canvas.create_line(x+p(8), y+p(3), x+p(8), y+p(8),
+                           x+p(16), y+p(8), x+p(16), y+p(3),
+                           fill=color, width=width, capstyle="round")
+    elif kind == "results":
+        canvas.create_rectangle(x+p(5), y+p(3), x+p(19), y+p(21),
+                                outline=color, width=width)
+        for yy in (8, 12, 16):
+            canvas.create_oval(x+p(8), y+p(yy), x+p(9), y+p(yy+1),
+                               fill=color, outline=color)
+            canvas.create_line(x+p(11), y+p(yy+.5), x+p(17), y+p(yy+.5),
+                               fill=color, width=width)
+    elif kind == "gear":
+        canvas.create_oval(x+p(7), y+p(7), x+p(17), y+p(17),
+                           outline=color, width=width)
+        canvas.create_oval(x+p(10), y+p(10), x+p(14), y+p(14),
+                           outline=color, width=width)
+        for dx, dy in ((12,3),(12,21),(3,12),(21,12),(6,6),(18,18),(18,6),(6,18)):
+            canvas.create_line(x+p(12), y+p(12), x+p(dx), y+p(dy),
+                               fill=color, width=width, capstyle="round")
+    elif kind == "stop":
+        canvas.create_rectangle(x+p(6), y+p(6), x+p(18), y+p(18),
+                                fill=color, outline=color)
+    elif kind == "play":
+        canvas.create_polygon(x+p(7), y+p(4), x+p(20), y+p(12),
+                              x+p(7), y+p(20), fill=color, outline="")
+    elif kind == "refresh":
+        canvas.create_arc(x+p(4), y+p(4), x+p(20), y+p(20), start=35,
+                          extent=285, style="arc", outline=color, width=width)
+        canvas.create_polygon(x+p(17), y+p(3), x+p(22), y+p(4),
+                              x+p(19), y+p(9), fill=color, outline="")
+    else:
+        for dx in (6, 12, 18):
+            canvas.create_oval(x+p(dx-2), y+p(10), x+p(dx+2), y+p(14),
+                               fill=color, outline="")
+
+
+class CheckChoice(tk.Canvas):
+    """Rounded Windows-style checkbox with a vector check mark."""
+    def __init__(self, master, text, variable, command=None, width=82):
+        super().__init__(master, height=32, width=width, bg=SURFACE,
+                         highlightthickness=0, bd=0, cursor="hand2")
+        self.label, self.variable, self.command = text, variable, command
+        self.bind("<Button-1>", self._toggle)
+        self.bind("<Configure>", lambda _e: self.draw())
+        variable.trace_add("write", lambda *_a: self.draw())
+        self.draw()
+
+    def _toggle(self, _event=None):
+        self.variable.set(not self.variable.get())
+        if self.command:
+            self.command()
+
+    def draw(self):
+        self.delete("all")
+        selected = bool(self.variable.get())
+        _rounded(self, 2, 7, 20, 25, 5, fill=BLUE if selected else "#f8fafc",
+                 outline=BLUE if selected else "#c8d2df")
+        if selected:
+            _icon(self, "check", 3, 8, 16, "white", 2)
+        self.create_text(28, 16, text=self.label, anchor="w", fill=INK,
+                         font=(FONT_KR, 9))
+
+
 class MetricCard(tk.Canvas):
     def __init__(self, master, title, variable, color, icon, command=None):
         super().__init__(master, height=84, bg=BG, highlightthickness=0, bd=0,
@@ -184,17 +265,17 @@ class MetricCard(tk.Canvas):
                          font=(FONT_KR, 7))
 
 
-class ToggleChip(tk.Button):
+class ToggleChip(tk.Canvas):
     def __init__(self, master, text, variable, color, icon="", command=None):
         self.variable = variable
         self.label = text
         self.color = color
         self.icon = icon
         self.user_command = command
-        super().__init__(
-            master, command=self.toggle, relief="flat", bd=0, cursor="hand2",
-            font=(FONT_KR, 8, "bold"), padx=10, pady=7, anchor="w",
-        )
+        super().__init__(master, height=40, bg=SURFACE, highlightthickness=0,
+                         bd=0, cursor="hand2")
+        self.bind("<Button-1>", lambda _e: self.toggle())
+        self.bind("<Configure>", lambda _e: self.sync())
         variable.trace_add("write", lambda *_a: self.sync())
         self.sync()
 
@@ -205,16 +286,24 @@ class ToggleChip(tk.Button):
 
     def sync(self):
         selected = bool(self.variable.get())
-        self.configure(
-            text=f"{self.icon}  {self.label}{'     ●' if selected else ''}",
-            bg="#f2f7ff" if selected else "#fafbfd",
-            fg=self.color if selected else MUTED,
-            activebackground="#e8f2ff",
-            activeforeground=self.color,
-            highlightthickness=1,
-            highlightbackground=self.color if selected else BORDER,
-            highlightcolor=self.color if selected else BORDER,
-        )
+        self.delete("all")
+        width = max(120, self.winfo_width())
+        _rounded(self, 1, 2, width-2, 38, 8,
+                 fill=_blend(self.color, "#ffffff", .92) if selected else "#fafbfd",
+                 outline=self.color if selected else BORDER)
+        kind = {"입교예정": "calendar", "예약조회": "calendar",
+                "수료조회": "results", "조회오류": "search"}.get(
+                    self.label, "check")
+        self.create_oval(10, 10, 30, 30,
+                         fill=_blend(self.color, "#ffffff", .86), outline="")
+        _icon(self, kind, 12, 12, 16, self.color, 2)
+        self.create_text(38, 20, text=self.label, anchor="w",
+                         fill=self.color if selected else MUTED,
+                         font=(FONT_KR, 9, "bold"))
+        self.create_oval(width-29, 9, width-9, 29,
+                         fill=self.color if selected else "#e7ecf2", outline="")
+        if selected:
+            _icon(self, "check", width-28, 10, 18, "white", 2)
 
 
 class ActionCard(tk.Canvas):
@@ -256,19 +345,27 @@ class ActionCard(tk.Canvas):
     def draw(self):
         self.delete("all")
         width = max(self.winfo_width(), 180)
-        height = max(self.winfo_height(), 80)
+        height = max(self.winfo_height(), 34)
         color = "#c9d2dd" if self.state == "disabled" else self.color
         if self.hover and self.state != "disabled":
             color = _blend(color, "#000000", .10)
         self.create_rectangle(7, 8, width - 2, height - 1, fill="#dbe3ec", outline="")
         _rounded(self, 1, 1, width - 7, height - 7, 10, fill=color, outline="")
-        icon_y = max(25, height * .34)
-        self.create_text(21, icon_y, text=self.icon, anchor="w", fill=self.fg,
-                         font=("Segoe UI Symbol", 17, "bold"))
-        self.create_text(55, max(24, height * .31), text=self.title,
-                         anchor="w", fill=self.fg, font=(FONT_KR, 11, "bold"))
-        if self.subtitle:
-            self.create_text(55, max(47, height * .60), text=self.subtitle,
+        icon_y = height / 2 if not self.subtitle else max(25, height * .34)
+        kind = {"선택 조건으로 조회": "search", "오늘 업무": "gear",
+                "조회 결과 보기": "results", "조회 중지": "stop",
+                "조회 재개": "play", "새 조회": "refresh"}.get(self.title, "more")
+        compact_control = not self.subtitle
+        icon_size = 18 if compact_control else 24
+        icon_x = 13 if compact_control else 18
+        _icon(self, kind, icon_x, icon_y-icon_size/2, icon_size, self.fg, 2)
+        title_y = height / 2 if compact_control else max(24, height * .31)
+        title_x = 39 if compact_control else 54
+        title_font = 9 if compact_control else 11
+        self.create_text(title_x, title_y, text=self.title, anchor="w",
+                         fill=self.fg, font=(FONT_KR, title_font, "bold"))
+        if self.subtitle and width >= 255:
+            self.create_text(54, max(47, height * .60), text=self.subtitle,
                              anchor="w", fill=self.fg, font=(FONT_KR, 8))
 
 
@@ -420,7 +517,7 @@ def _build_header(app, master):
 
 
 def _build_conditions(app, master):
-    panel = _panel(master, 12)
+    panel = _panel(master, 10)
     panel.pack(fill="both", expand=True)
     _section_title(panel, "조회 조건 설정")
 
@@ -443,16 +540,16 @@ def _build_conditions(app, master):
     region = tk.Frame(panel, bg=SURFACE)
     region.pack(fill="x", pady=(7, 2))
     for label, variable in (("서울", app.seoul), ("경기", app.gg), ("인천", app.incheon)):
-        ttk.Checkbutton(region, text=label, variable=variable).pack(side="left", padx=(0, 14))
-    ttk.Checkbutton(panel, text="백그라운드 모드 (작은 창)",
-                    variable=app.background_mode).pack(anchor="w", pady=(2, 6))
+        CheckChoice(region, label, variable).pack(side="left", padx=(0, 6))
+    CheckChoice(panel, "백그라운드 모드 (작은 창)",
+                app.background_mode, width=210).pack(anchor="w", pady=(0, 4))
 
     app.alert_var = tk.StringVar(value="미수료·입교예정 대상자를 확인해 주세요.")
     app.alert_bar = tk.Label(panel, textvariable=app.alert_var, bg=PALE_WARN,
                              fg="#885400", font=(FONT_KR, 8), anchor="w",
-                             padx=10, pady=9)
-    app.alert_bar.pack(fill="x", pady=(2, 9))
-    tk.Frame(panel, bg=BORDER, height=1).pack(fill="x", pady=(0, 9))
+                             padx=10, pady=7)
+    app.alert_bar.pack(fill="x", pady=(2, 7))
+    tk.Frame(panel, bg=BORDER, height=1).pack(fill="x", pady=(0, 7))
 
     range_header = tk.Frame(panel, bg=SURFACE)
     range_header.pack(fill="x", pady=(0, 6))
@@ -477,7 +574,7 @@ def _build_conditions(app, master):
     status_grid.columnconfigure(0, weight=1)
     status_grid.columnconfigure(1, weight=1)
 
-    tk.Frame(panel, bg=BORDER, height=1).pack(fill="x", pady=9)
+    tk.Frame(panel, bg=BORDER, height=1).pack(fill="x", pady=7)
     query_header = tk.Frame(panel, bg=SURFACE)
     query_header.pack(fill="x", pady=(0, 6))
     tk.Label(query_header, text="3.  조회 항목 (선택)", bg=SURFACE, fg=BLUE,
@@ -498,56 +595,56 @@ def _build_conditions(app, master):
         value="선택한 항목을 순서대로 조회합니다. (수료조회 → 예약조회)"
     )
     tk.Label(panel, textvariable=app.query_note, bg=PALE_GREEN, fg=GREEN,
-             font=(FONT_KR, 8), anchor="w", padx=10, pady=8).pack(
-        fill="x", pady=(8, 0)
+             font=(FONT_KR, 8), anchor="w", padx=10, pady=6).pack(
+        fill="x", pady=(6, 0)
     )
     app.target_preview = tk.StringVar(value="조회 조건을 계산합니다.")
     tk.Label(panel, textvariable=app.target_preview, bg=PALE_BLUE, fg=INK,
              font=(FONT_KR, 8, "bold"), anchor="w", justify="left",
-             padx=10, pady=9, wraplength=360).pack(fill="x", pady=(8, 0))
+             padx=10, pady=7, wraplength=360).pack(fill="x", pady=(6, 0))
     return panel
 
 
 def _build_actions(app, master):
-    panel = _panel(master, 12)
+    panel = _panel(master, 10)
     panel.pack(fill="both", expand=True)
-    guide = tk.Frame(panel, bg=PALE_BLUE, padx=13, pady=12)
-    guide.pack(fill="x", pady=(0, 8))
-    tk.Label(guide, text="☼  조회 안내", bg=PALE_BLUE, fg=BLUE,
+    guide = tk.Frame(panel, bg=PALE_BLUE, padx=12, pady=7)
+    guide.pack(fill="x", pady=(0, 5))
+    tk.Label(guide, text="조회 안내", bg=PALE_BLUE, fg=BLUE,
              font=(FONT_KR, 10, "bold")).pack(anchor="w")
-    tk.Label(guide, text="선택한 조건에 맞는 대상만 조회하여\n빠르고 정확한 결과를 제공합니다.",
+    tk.Label(guide, text="선택 조건에 맞는 대상만 빠르게 조회합니다.",
              bg=PALE_BLUE, fg=MUTED, justify="left",
-             font=(FONT_KR, 8)).pack(anchor="w", pady=(8, 0))
+             font=(FONT_KR, 8)).pack(anchor="w", pady=(3, 0))
 
     ActionCard(master=panel, title="선택 조건으로 조회",
                subtitle="선택한 조건으로 조회를 시작합니다", icon="◎",
-               command=app.run_filtered, color="#0867e8").pack(fill="x", pady=4)
+               command=app.run_filtered, color="#0867e8", height=64).pack(fill="x", pady=3)
     ActionCard(master=panel, title="오늘 업무",
                subtitle="오늘 업무를 시작합니다", icon="☼",
-               command=app.one_click_run, color=GREEN).pack(fill="x", pady=4)
+               command=app.one_click_run, color=GREEN, height=64).pack(fill="x", pady=3)
     ActionCard(master=panel, title="조회 결과 보기",
                subtitle="조회 결과를 확인합니다", icon="▣",
-               command=app.open_result, color=PURPLE).pack(fill="x", pady=4)
+               command=app.open_result, color=PURPLE, height=64).pack(fill="x", pady=3)
     ActionCard(master=panel, title="기타 기능",
                subtitle="설정 및 기타 기능을 관리합니다", icon="•••",
                command=app.show_more_actions, color="#edf1f6",
-               fg=INK).pack(fill="x", pady=4)
+               fg=INK, height=58).pack(fill="x", pady=3)
 
     controls = tk.Frame(panel, bg=SURFACE)
     controls.pack(fill="x", side="bottom", pady=(7, 0))
     app.stop_btn = ActionCard(controls, "조회 중지", "", "■", app.stop, RED,
-                              height=36)
+                              height=42)
     app.stop_btn.pack(fill="x", pady=2)
     secondary_controls = tk.Frame(controls, bg=SURFACE)
     secondary_controls.pack(fill="x")
     secondary_controls.columnconfigure(0, weight=1)
     secondary_controls.columnconfigure(1, weight=1)
     app.resume_btn = ActionCard(secondary_controls, "중지된 조회 재개", "", "▶",
-                                app.resume_run, BLUE, height=36, state="disabled")
+                                app.resume_run, BLUE, height=42, state="disabled")
     app.resume_btn.title = "조회 재개"
     app.resume_btn.grid(row=0, column=0, sticky="ew", padx=(0, 3), pady=2)
     app.reset_btn = ActionCard(secondary_controls, "새 조회", "", "↺",
-                               app.reset_run_state, "#64748b", height=36)
+                               app.reset_run_state, "#64748b", height=42)
     app.reset_btn.grid(row=0, column=1, sticky="ew", padx=(3, 0), pady=2)
     return panel
 
@@ -635,7 +732,8 @@ def _build_monitor(app, master):
 def build_dashboard_ui(app):
     """Build the reference-driven dashboard and attach required widgets to app."""
     app.geometry("1536x920")
-    app.minsize(1280, 760)
+    # Keep the complete primary workflow usable in a non-maximized laptop window.
+    app.minsize(1180, 680)
     app.configure(bg=BG)
     if sys.platform == "win32":
         app.after(50, lambda: app.state("zoomed"))
