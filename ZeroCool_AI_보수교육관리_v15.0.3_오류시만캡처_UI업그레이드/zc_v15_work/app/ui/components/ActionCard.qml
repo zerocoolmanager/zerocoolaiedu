@@ -10,6 +10,9 @@ Button {
     property string title: ""
     property string subtitle: ""
     property bool quiet: false
+    property bool tonal: false
+    property string iconTone: tonal ? "blue" : (quiet ? "ink" : "white")
+    readonly property bool narrow: width < 220
     implicitHeight: 92
     hoverEnabled: true
     focusPolicy: Qt.StrongFocus
@@ -33,40 +36,50 @@ Button {
             border.width: root.activeFocus && root.focusReason === Qt.TabFocusReason ? 2 : 0
             border.color: "#111111"
             gradient: Gradient {
-                GradientStop { position: 0; color: root.quiet ? "#f5f7fa" : (root.hovered ? Qt.lighter(root.accent, 1.06) : root.accent) }
-                GradientStop { position: 1; color: root.quiet ? "#e9eef4" : root.accent2 }
+                GradientStop {
+                    position: 0
+                    color: root.quiet ? "#f5f7fa"
+                         : root.tonal ? Qt.rgba(root.accent.r, root.accent.g, root.accent.b, root.hovered ? .16 : .11)
+                         : (root.hovered ? Qt.lighter(root.accent, 1.06) : root.accent)
+                }
+                GradientStop {
+                    position: 1
+                    color: root.quiet ? "#e9eef4"
+                         : root.tonal ? Qt.rgba(root.accent2.r, root.accent2.g, root.accent2.b, root.hovered ? .10 : .06)
+                         : root.accent2
+                }
             }
         }
     }
 
     contentItem: Row {
-        spacing: 14
-        leftPadding: 19
-        rightPadding: 16
+        spacing: root.narrow ? 9 : 14
+        leftPadding: root.narrow ? 12 : 19
+        rightPadding: root.narrow ? 10 : 16
         FluentIcon {
             name: root.iconName
-            tone: root.quiet ? "ink" : "white"
-            iconSize: 24
+            tone: root.iconTone
+            iconSize: root.narrow ? 20 : 24
             anchors.verticalCenter: parent.verticalCenter
         }
         Column {
             spacing: 6
             anchors.verticalCenter: parent.verticalCenter
-            width: parent.width - 58
+            width: parent.width - (root.narrow ? 41 : 58)
             Text {
                 text: root.title
-                color: root.quiet ? "#132a49" : "white"
+                color: root.quiet ? "#132a49" : (root.tonal ? root.accent2 : "white")
                 font.family: "Segoe UI"
-                font.pixelSize: 16
+                font.pixelSize: root.narrow ? 13 : 16
                 font.weight: Font.DemiBold
                 elide: Text.ElideRight
                 width: parent.width
             }
             Text {
                 text: root.subtitle
-                color: root.quiet ? "#647188" : "#eaf4ff"
+                color: root.quiet || root.tonal ? "#647188" : "#eaf4ff"
                 font.family: "Segoe UI"
-                font.pixelSize: 11
+                font.pixelSize: root.narrow ? 9 : 11
                 elide: Text.ElideRight
                 width: parent.width
             }

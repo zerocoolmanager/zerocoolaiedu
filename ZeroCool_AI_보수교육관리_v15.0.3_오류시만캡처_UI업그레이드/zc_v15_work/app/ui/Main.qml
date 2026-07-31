@@ -15,12 +15,12 @@ ApplicationWindow {
     title: "ZeroCool AI · 서울·경기·인천 교육수료 관리 v15.0.3"
     color: "#f4f7fb"
 
-    readonly property color navy: "#06284d"
+    readonly property color navy: "#f3f6f9"
     readonly property color blue: "#0f6cbd"
     readonly property color ink: "#10233f"
     readonly property color muted: "#64748b"
     readonly property int gutter: width < 1280 ? 12 : 16
-    readonly property bool compact: width < 1280 || height < 820
+    readonly property bool compact: width < 1380 || height < 800
 
     MessageDialog {
         id: infoDialog
@@ -180,11 +180,13 @@ ApplicationWindow {
         anchors.left: parent.left
         anchors.top: parent.top
         anchors.bottom: parent.bottom
-        width: compact ? 188 : 214
+        width: compact ? 72 : 214
         color: window.navy
+        border.color: "#dfe5ec"
+        border.width: 1
         gradient: Gradient {
-            GradientStop { position: 0; color: "#05213f" }
-            GradientStop { position: 1; color: "#06345f" }
+            GradientStop { position: 0; color: "#f8fafc" }
+            GradientStop { position: 1; color: "#edf3f8" }
         }
 
         Row {
@@ -206,7 +208,8 @@ ApplicationWindow {
             Text {
                 anchors.verticalCenter: parent.verticalCenter
                 text: "ZeroCool AI Professional"
-                color: "white"
+                visible: !window.compact
+                color: "#18314f"
                 font.family: "Segoe UI"
                 font.pixelSize: compact ? 11 : 12
                 font.weight: Font.Medium
@@ -221,7 +224,8 @@ ApplicationWindow {
             spacing: 5
             Text {
                 text: "ZeroCool AI"
-                color: "white"
+                visible: !window.compact
+                color: "#18314f"
                 font.family: "Segoe UI"
                 font.pixelSize: 15
                 font.weight: Font.DemiBold
@@ -237,27 +241,30 @@ ApplicationWindow {
                 delegate: Button {
                     required property var modelData
                     required property int index
-                    width: sidebar.width - 20
+                    width: sidebar.width - (window.compact ? 12 : 20)
                     height: 44
                     x: 10
                     hoverEnabled: true
                     background: Rectangle {
                         radius: 7
-                        color: index === 0 ? "#145fb9" : (parent.hovered ? "#124476" : "transparent")
+                        color: index === 0 ? "#e1effd" : (parent.hovered ? "#e9eef4" : "transparent")
+                        border.width: index === 0 ? 1 : 0
+                        border.color: "#b8d7f5"
                     }
                     contentItem: Row {
                         spacing: 12
-                        leftPadding: 13
+                        leftPadding: window.compact ? 15 : 13
                         FluentIcon {
-                            name: modelData[0]; tone: "white"; iconSize: 18
+                            name: modelData[0]; tone: index === 0 ? "blue" : "ink"; iconSize: 18
                             anchors.verticalCenter: parent.verticalCenter
                             opacity: index === 0 ? 1 : .85
                         }
                         Text {
                             anchors.verticalCenter: parent.verticalCenter
                             text: modelData[1]
-                            color: "white"
-                            opacity: index === 0 ? 1 : .88
+                            visible: !window.compact
+                            color: index === 0 ? "#0b5cad" : "#30445e"
+                            opacity: 1
                             font.family: "Segoe UI"
                             font.pixelSize: 13
                             font.weight: index === 0 ? Font.DemiBold : Font.Normal
@@ -279,23 +286,24 @@ ApplicationWindow {
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.bottom: footer.top
-            anchors.margins: 12
-            height: 74
+            anchors.margins: window.compact ? 8 : 12
+            height: window.compact ? 52 : 74
             radius: 9
-            color: "#0b3158"
-            border.color: "#22517d"
+            color: "#f8fbfe"
+            border.color: "#d5dee8"
             Row {
                 anchors.fill: parent
                 anchors.margins: 12
                 spacing: 10
                 Rectangle {
-                    width: 36; height: 36; radius: 8; color: "#19558c"
-                    FluentIcon { anchors.centerIn: parent; name: "person"; tone: "white"; iconSize: 20 }
+                    width: 36; height: 36; radius: 8; color: "#e0edf9"
+                    FluentIcon { anchors.centerIn: parent; name: "person"; tone: "blue"; iconSize: 20 }
                 }
                 Column {
+                    visible: !window.compact
                     spacing: 4
-                    Text { text: "관리자"; color: "white"; font.pixelSize: 12; font.weight: Font.DemiBold }
-                    Text { text: "admin  •  Online"; color: "#62e6a7"; font.pixelSize: 10 }
+                    Text { text: "관리자"; color: "#1d3552"; font.pixelSize: 12; font.weight: Font.DemiBold }
+                    Text { text: "admin  •  Online"; color: "#168552"; font.pixelSize: 10 }
                 }
             }
         }
@@ -305,8 +313,9 @@ ApplicationWindow {
             anchors.bottom: parent.bottom
             anchors.margins: 18
             spacing: 3
-            Text { text: "v15.0 Professional"; color: "#d2dfec"; font.pixelSize: 10 }
-            Text { text: "© 2026 ZeroCool AI"; color: "#a8bdd2"; font.pixelSize: 9 }
+            visible: !window.compact
+            Text { text: "v15.0 Professional"; color: "#53677f"; font.pixelSize: 10 }
+            Text { text: "© 2026 ZeroCool AI"; color: "#7c8ca0"; font.pixelSize: 9 }
         }
     }
 
@@ -367,7 +376,7 @@ ApplicationWindow {
                 spacing: window.gutter
 
                 Rectangle {
-                    Layout.preferredWidth: compact ? 324 : 390
+                    Layout.preferredWidth: compact ? 300 : 390
                     Layout.fillHeight: true
                     radius: 10
                     color: "white"
@@ -544,10 +553,18 @@ ApplicationWindow {
                             }
                             Rectangle {
                                 width: parent.width; height: 36; radius: 7; color: "#edfaf3"
-                                Text {
-                                    anchors.centerIn: parent
-                                    text: "선택한 항목을 순서대로 조회합니다. (수료조회 → 예약조회)"
-                                    color: "#168552"; font.pixelSize: 9
+                                Row {
+                                    anchors.fill: parent
+                                    anchors.margins: 9
+                                    spacing: 7
+                                    FluentIcon { name: "info"; tone: "green"; iconSize: 16 }
+                                    Text {
+                                        width: parent.width - 24
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        text: backend.selectionSummary
+                                        elide: Text.ElideRight
+                                        color: "#168552"; font.pixelSize: 9
+                                    }
                                 }
                             }
                         }
@@ -555,7 +572,7 @@ ApplicationWindow {
                 }
 
                 Rectangle {
-                    Layout.preferredWidth: compact ? 226 : 276
+                    Layout.preferredWidth: compact ? 210 : 276
                     Layout.fillHeight: true
                     radius: 10
                     color: "white"
@@ -568,6 +585,7 @@ ApplicationWindow {
                         Rectangle {
                             width: parent.width
                             height: compact ? 104 : 124
+                            visible: !window.compact
                             radius: 9
                             gradient: Gradient {
                                 GradientStop { position: 0; color: "#edf6ff" }
@@ -592,38 +610,47 @@ ApplicationWindow {
                         }
                         ActionCard {
                             width: parent.width
-                            height: compact ? 84 : 100
-                            accent: "#1671e8"; accent2: "#075ed8"
-                            iconName: "search"; title: "선택 조건으로 조회"
-                            subtitle: "선택한 조건으로 조회를 시작합니다"
-                            enabled: !backend.running
-                            opacity: enabled ? 1 : .55
-                            onClicked: backend.startSelected()
+                            height: compact ? 68 : 100
+                            accent: backend.running ? "#e68a00" : (backend.canResume ? "#1578d4" : "#1671e8")
+                            accent2: backend.running ? "#d97706" : (backend.canResume ? "#0f64b4" : "#075ed8")
+                            iconName: backend.running ? "pause" : "play"
+                            title: backend.running ? "조회 일시정지" : (backend.canResume ? "조회 재개" : "선택 조건으로 조회")
+                            subtitle: compact ? "" : (backend.running ? "현재 작업을 정리한 뒤 멈춥니다"
+                                      : (backend.canResume ? "중단된 조건으로 다시 시작합니다" : "선택한 조건으로 조회를 시작합니다"))
+                            onClicked: {
+                                if (backend.running) backend.stop()
+                                else if (backend.canResume) backend.resume()
+                                else backend.startSelected()
+                            }
                         }
                         ActionCard {
                             width: parent.width
-                            height: compact ? 84 : 100
+                            height: compact ? 68 : 100
                             accent: "#1aa25b"; accent2: "#13884a"
+                            tonal: true
+                            iconTone: "green"
                             iconName: "settings"; title: "오늘 업무"
-                            subtitle: "오늘 도래한 업무를 시작합니다"
+                            subtitle: compact ? "" : "오늘 도래한 업무를 시작합니다"
                             enabled: !backend.running
                             opacity: enabled ? 1 : .55
                             onClicked: backend.startDaily()
                         }
                         ActionCard {
                             width: parent.width
-                            height: compact ? 84 : 100
+                            height: compact ? 68 : 100
                             accent: "#7550c7"; accent2: "#6038b3"
+                            tonal: true
+                            iconTone: "purple"
                             iconName: "document_text"; title: "조회 결과 보기"
-                            subtitle: "최근 조회 결과를 확인합니다"
+                            subtitle: compact ? "" : "최근 조회 결과를 확인합니다"
                             onClicked: backend.openResults()
                         }
                         ActionCard {
                             width: parent.width
-                            height: compact ? 76 : 88
+                            height: compact ? 62 : 88
                             quiet: true
                             iconName: "settings"; title: "기타 기능"
-                            subtitle: "설정 및 보조 기능을 관리합니다"
+                            subtitle: compact ? "" : "설정 및 보조 기능을 관리합니다"
                             onClicked: toolsDialog.open()
                         }
                         Item { width: 1; height: Math.max(0, parent.height - y - stopButton.height) }
@@ -631,12 +658,12 @@ ApplicationWindow {
                             id: stopButton
                             width: parent.width
                             height: 46
-                            enabled: backend.running
+                            enabled: backend.running || backend.canResume
                             hoverEnabled: true
                             focusPolicy: Qt.StrongFocus
                             background: Rectangle {
                                 radius: 8
-                                color: !parent.enabled ? "#edf0f4" : (parent.down ? "#d9363e" : parent.hovered ? "#fa4f57" : "#f0444c")
+                                color: !parent.enabled ? "#edf0f4" : (parent.down ? "#b4232c" : parent.hovered ? "#e33d46" : "#d92d36")
                                 border.width: parent.activeFocus && parent.focusReason === Qt.TabFocusReason ? 2 : 0
                                 border.color: "#111111"
                             }
@@ -645,13 +672,13 @@ ApplicationWindow {
                                 anchors.centerIn: parent
                                 FluentIcon { name: "stop"; tone: parent.parent.enabled ? "white" : "muted"; iconSize: 20 }
                                 Text {
-                                    text: backend.running ? "조회 중지" : "조회 대기"
+                                    text: backend.running || backend.canResume ? "조회 완전 종료" : "조회 대기"
                                     color: parent.parent.enabled ? "white" : "#8a95a5"
                                     font.pixelSize: 14
                                     font.weight: Font.DemiBold
                                 }
                             }
-                            onClicked: backend.stop()
+                            onClicked: backend.terminateRun()
                         }
                     }
                 }

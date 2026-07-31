@@ -8,6 +8,7 @@ Button {
     property string iconName: ""
     property string label: ""
     property string subtitle: ""
+    readonly property bool narrow: width < 150
     implicitHeight: subtitle.length ? 58 : 40
     hoverEnabled: true
     focusPolicy: Qt.StrongFocus
@@ -36,7 +37,7 @@ Button {
         }
         Column {
             anchors.left: root.iconName.length ? leadingIcon.right : parent.left
-            anchors.leftMargin: root.iconName.length ? 9 : 12
+            anchors.leftMargin: root.iconName.length ? (root.narrow ? 6 : 9) : (root.narrow ? 8 : 12)
             anchors.right: check.left
             anchors.rightMargin: 8
             spacing: 2
@@ -45,7 +46,7 @@ Button {
                 text: root.label
                 color: root.checkedValue ? root.accent : "#34445d"
                 font.family: "Segoe UI"
-                font.pixelSize: 13
+                font.pixelSize: root.narrow ? 11 : 13
                 font.weight: Font.DemiBold
                 elide: Text.ElideRight
                 width: parent.width
@@ -55,16 +56,18 @@ Button {
                 text: root.subtitle
                 color: "#758298"
                 font.family: "Segoe UI"
-                font.pixelSize: 10
+                font.pixelSize: root.narrow ? 8 : 10
                 elide: Text.ElideRight
                 width: parent.width
             }
         }
         Rectangle {
             id: check
-            width: 18; height: 18; radius: 5
+            width: root.narrow ? 16 : 18
+            height: width
+            radius: 5
             anchors.right: parent.right
-            anchors.rightMargin: 10
+            anchors.rightMargin: root.narrow ? 7 : 10
             anchors.verticalCenter: parent.verticalCenter
             color: root.checkedValue ? root.accent : "#f4f7fa"
             border.width: root.checkedValue ? 0 : 1

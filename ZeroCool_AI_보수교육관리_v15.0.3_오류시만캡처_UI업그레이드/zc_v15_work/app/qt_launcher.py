@@ -17,9 +17,9 @@ from datetime import datetime
 from pathlib import Path
 
 from PySide6.QtCore import QCoreApplication, QObject, Property, QTimer, QUrl, Signal, Slot
-from PySide6.QtGui import QGuiApplication, QIcon
+from PySide6.QtGui import QIcon
 from PySide6.QtQml import QQmlApplicationEngine
-from PySide6.QtWidgets import QFileDialog, QMessageBox
+from PySide6.QtWidgets import QApplication, QFileDialog, QMessageBox
 
 
 FROZEN = bool(getattr(sys, "frozen", False))
@@ -62,6 +62,10 @@ class LauncherBridge(QObject):
         self._started = 0.0
         self._last_output: Path | None = None
         self._pending_followup = False
+        self._pause_requested = False
+        self._can_resume = False
+        self._last_request: tuple[str, str, int] | None = None
+        self._hard_terminated = False
         self._timer = QTimer(self)
         self._timer.setInterval(80)
         self._timer.timeout.connect(self._poll)
@@ -76,6 +80,14 @@ class LauncherBridge(QObject):
     def _get_elapsed(self): return self._elapsed
     def _get_counts(self): return self._counts
     def _get_background(self): return self._background
+    def _get_can_resume(self): return self._can_resume
+    def _get_selection_summary(self):
+        regions = "·".join(name for name, value in self._regions.items() if value) or "기관 미선택"
+        queries = " + ".join(name for name, value in self._queries.items() if value) or "조회 항목 미선택"
+        selected_statuses = [name for name, value in self._statuses.items() if value]
+        scope = "전체 상태" if len(selected_statuses) == len(self._statuses) else "·".join(selected_statuses) or "상태 미선택"
+        browser = "백그라운드" if self._background else "일반 창"
+        return f"{regions}  |  {queries}  |  {scope}  |  {browser}"
 
     filePath = Property(str, _get_file_path, notify=changed)
     statusText = Property(str, _get_status, notify=changed)
@@ -86,6 +98,8 @@ class LauncherBridge(QObject):
     elapsedText = Property(str, _get_elapsed, notify=changed)
     counts = Property("QVariantMap", _get_counts, notify=changed)
     backgroundMode = Property(bool, _get_background, notify=changed)
+    canResume = Property(bool, _get_can_resume, notify=changed)
+    selectionSummary = Property(str, _get_selection_summary, notify=changed)
 
     @Slot()
     def selectFile(self):
@@ -157,13 +171,45 @@ class LauncherBridge(QObject):
     def stop(self):
         if not self._running:
             return
+        self._pause_requested = True
         if self._control_file:
             try:
                 self._control_file.write_text("STOP", encoding="utf-8")
             except OSError:
                 pass
-        self._status = "안전하게 조회를 중지하는 중입니다..."
-        self._append_log("■ 사용자 중지 요청 · 현재 작업 정리 중")
+        self._status = "현재 작업을 정리한 뒤 일시정지합니다..."
+        self._append_log("Ⅱ 일시정지 요청 · 현재 작업을 안전하게 정리 중")
+        self.changed.emit()
+
+    @Slot()
+    def resume(self):
+        if self._running or not self._can_resume or not self._last_request:
+            return
+        mode, target, limit = self._last_request
+        self._can_resume = False
+        self._append_log("▶ 조회 재개")
+        self._start(mode, target, limit)
+
+    @Slot()
+    def terminateRun(self):
+        self._pending_followup = False
+        self._pause_requested = False
+        self._can_resume = False
+        self._hard_terminated = True
+        if self._control_file:
+            try:
+                self._control_file.write_text("STOP", encoding="utf-8")
+            except OSError:
+                pass
+        proc = self._proc
+        if proc and proc.poll() is None:
+            try:
+                proc.terminate()
+            except OSError:
+                pass
+        self._running = False
+        self._status = "조회 작업을 완전히 종료했습니다."
+        self._append_log("■ 조회 완전 종료")
         self.changed.emit()
 
     @Slot()
@@ -265,6 +311,10 @@ class LauncherBridge(QObject):
             # reservation are separate processes, never mixed in one run.
             self._pending_followup = True
             mode = "completion"
+        self._last_request = (mode, target, limit)
+        self._pause_requested = False
+        self._can_resume = False
+        self._hard_terminated = False
         stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         suffix = "_3명테스트" if limit else "_교육수료조회"
         self._last_output = RESULTS_DIR / f"{Path(self._file_path).stem}{suffix}_{stamp}.xlsx"
@@ -340,11 +390,25 @@ class LauncherBridge(QObject):
                 break
             dirty = True
             if isinstance(item, tuple) and item[0] == "DONE":
+                if self._hard_terminated:
+                    self._hard_terminated = False
+                    self._running = False
+                    continue
                 code = int(item[1])
                 self._running = False
                 self._progress = 1.0 if code == 0 else self._progress
-                self._status = "조회가 완료되었습니다." if code == 0 else "조회가 중지되었거나 오류가 발생했습니다."
-                self._append_log("✓ 조회 완료" if code == 0 else "■ 조회 종료")
+                paused = self._pause_requested
+                self._can_resume = paused
+                self._pause_requested = False
+                self._status = (
+                    "조회가 완료되었습니다." if code == 0 else
+                    "조회가 일시정지되었습니다. 재개할 수 있습니다." if paused else
+                    "조회가 중지되었거나 오류가 발생했습니다."
+                )
+                self._append_log(
+                    "✓ 조회 완료" if code == 0 else
+                    "Ⅱ 조회 일시정지" if paused else "■ 조회 종료"
+                )
                 if code == 0:
                     self._refresh_file()
                     if self._pending_followup:
@@ -376,7 +440,7 @@ def main() -> int:
         worker_main()
         return 0
     os.environ.setdefault("QT_QUICK_CONTROLS_STYLE", "Basic")
-    app = QGuiApplication(sys.argv)
+    app = QApplication(sys.argv)
     app.setApplicationName("ZeroCool AI Professional")
     app.setOrganizationName("ZeroCool AI")
     bridge = LauncherBridge()
@@ -390,6 +454,21 @@ def main() -> int:
     engine.load(QUrl.fromLocalFile(str(RESOURCE_BASE / "ui" / "Main.qml")))
     if not engine.rootObjects():
         return 1
+    if sys.platform == "win32":
+        def apply_windows_chrome():
+            try:
+                import ctypes
+                root = engine.rootObjects()[0]
+                hwnd = int(root.winId())
+                corner = ctypes.c_int(2)   # DWMWCP_ROUND
+                backdrop = ctypes.c_int(2) # DWMSBT_MAINWINDOW (Mica)
+                dark = ctypes.c_int(0)
+                ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, 33, ctypes.byref(corner), 4)
+                ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, 38, ctypes.byref(backdrop), 4)
+                ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, 20, ctypes.byref(dark), 4)
+            except Exception:
+                pass
+        QTimer.singleShot(0, apply_windows_chrome)
     return app.exec()
 
 
