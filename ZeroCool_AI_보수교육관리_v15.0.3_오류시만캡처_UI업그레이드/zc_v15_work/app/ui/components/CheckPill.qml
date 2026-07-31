@@ -23,27 +23,32 @@ Button {
         Behavior on color { ColorAnimation { duration: 100 } }
     }
 
-    contentItem: Row {
-        spacing: 9
-        leftPadding: 12
-        rightPadding: 10
+    contentItem: Item {
         FluentIcon {
+            id: leadingIcon
             visible: root.iconName.length > 0
             name: root.iconName
             tone: root.checkedValue ? (root.accent === "#16a060" ? "green" : "blue") : "muted"
             iconSize: 20
+            anchors.left: parent.left
+            anchors.leftMargin: 12
             anchors.verticalCenter: parent.verticalCenter
         }
         Column {
+            anchors.left: root.iconName.length ? leadingIcon.right : parent.left
+            anchors.leftMargin: root.iconName.length ? 9 : 12
+            anchors.right: check.left
+            anchors.rightMargin: 8
             spacing: 2
             anchors.verticalCenter: parent.verticalCenter
-            width: Math.max(0, parent.width - check.width - (root.iconName.length ? 58 : 38))
             Text {
                 text: root.label
                 color: root.checkedValue ? root.accent : "#34445d"
                 font.family: "Segoe UI"
                 font.pixelSize: 13
                 font.weight: Font.DemiBold
+                elide: Text.ElideRight
+                width: parent.width
             }
             Text {
                 visible: root.subtitle.length > 0
@@ -58,6 +63,8 @@ Button {
         Rectangle {
             id: check
             width: 18; height: 18; radius: 5
+            anchors.right: parent.right
+            anchors.rightMargin: 10
             anchors.verticalCenter: parent.verticalCenter
             color: root.checkedValue ? root.accent : "#f4f7fa"
             border.width: root.checkedValue ? 0 : 1

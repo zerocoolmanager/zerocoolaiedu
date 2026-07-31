@@ -26,6 +26,115 @@ ApplicationWindow {
         id: infoDialog
         buttons: MessageDialog.Ok
     }
+    Dialog {
+        id: toolsDialog
+        anchors.centerIn: parent
+        width: Math.min(680, window.width - 48)
+        height: Math.min(560, window.height - 64)
+        modal: true
+        title: "기타 기능"
+        standardButtons: Dialog.Close
+        background: Rectangle {
+            radius: 12
+            color: "#fbfdff"
+            border.color: "#dbe3ec"
+        }
+        contentItem: ScrollView {
+            clip: true
+            Column {
+                width: parent.width
+                spacing: 12
+                Text {
+                    text: "고급 조회 및 관리 도구"
+                    color: window.ink
+                    font.pixelSize: 17
+                    font.weight: Font.DemiBold
+                }
+                Text {
+                    width: parent.width
+                    text: "자주 쓰는 조회는 메인 화면에 유지하고, 보조 작업은 목적별로 모았습니다."
+                    color: window.muted
+                    font.pixelSize: 11
+                    wrapMode: Text.WordWrap
+                }
+                Grid {
+                    width: parent.width
+                    columns: 2
+                    columnSpacing: 10
+                    rowSpacing: 10
+                    Repeater {
+                        model: [
+                            ["미수료 재조회", "입교예정 제외 대상", "reset", "completion", "incomplete", 0],
+                            ["전체 미수료 재조회", "서울·경기·인천 전체", "reset", "completion", "incomplete_all", 0],
+                            ["수료일 공란 조회", "수료일이 비어 있는 대상", "search", "completion", "completion_blank", 0],
+                            ["결과없음 재조회", "조회 결과가 없는 대상", "search", "completion", "noresult", 0],
+                            ["조회오류 재조회", "오류 대상만 다시 조회", "error", "completion", "error", 0],
+                            ["입력정보부족 재조회", "정보 보완 대상 확인", "warning", "completion", "input_missing", 0],
+                            ["미조회자 조회", "아직 조회하지 않은 대상", "people", "completion", "unqueried", 0],
+                            ["3명 테스트", "선택 조건으로 빠른 점검", "play", "completion", "all", 3],
+                            ["예약조회 별도 실행", "예약만 독립적으로 조회", "calendar", "reservation", "all", 0],
+                            ["결과 폴더 열기", "생성된 Excel 파일 위치", "folder", "special", "results", 0],
+                            ["Debug 폴더 열기", "오류 캡처 및 진단 자료", "folder", "special", "debug", 0],
+                            ["최근 오류 진단", "로그에서 오류 내용 확인", "info", "special", "error", 0]
+                        ]
+                        delegate: Button {
+                            required property var modelData
+                            width: (parent.width - 10) / 2
+                            height: 62
+                            hoverEnabled: true
+                            background: Rectangle {
+                                radius: 8
+                                color: parent.down ? "#e8f2fc" : parent.hovered ? "#f1f7fd" : "#ffffff"
+                                border.width: 1
+                                border.color: parent.hovered ? "#8abbea" : "#d9e1ea"
+                            }
+                            contentItem: Row {
+                                leftPadding: 12
+                                rightPadding: 10
+                                spacing: 10
+                                FluentIcon {
+                                    name: modelData[2]
+                                    tone: "blue"
+                                    iconSize: 20
+                                    anchors.verticalCenter: parent.verticalCenter
+                                }
+                                Column {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    spacing: 3
+                                    width: parent.width - 52
+                                    Text {
+                                        text: modelData[0]
+                                        color: "#17304f"
+                                        font.pixelSize: 12
+                                        font.weight: Font.DemiBold
+                                        elide: Text.ElideRight
+                                        width: parent.width
+                                    }
+                                    Text {
+                                        text: modelData[1]
+                                        color: "#718096"
+                                        font.pixelSize: 9
+                                        elide: Text.ElideRight
+                                        width: parent.width
+                                    }
+                                }
+                            }
+                            onClicked: {
+                                if (modelData[3] === "special") {
+                                    if (modelData[4] === "results") backend.openResultsFolder()
+                                    else if (modelData[4] === "debug") backend.openDebugFolder()
+                                    else backend.showLastError()
+                                } else {
+                                    backend.runTarget(modelData[3], modelData[4], modelData[5])
+                                }
+                                toolsDialog.close()
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
     Connections {
         target: backend
         function onToastRequested(title, message) {
@@ -515,7 +624,7 @@ ApplicationWindow {
                             quiet: true
                             iconName: "settings"; title: "기타 기능"
                             subtitle: "설정 및 보조 기능을 관리합니다"
-                            onClicked: backend.showSettings()
+                            onClicked: toolsDialog.open()
                         }
                         Item { width: 1; height: Math.max(0, parent.height - y - stopButton.height) }
                         Button {
@@ -733,11 +842,31 @@ ApplicationWindow {
                 font.pixelSize: 11
             }
             Text {
-                width: parent.width * .20
+                width: parent.width * .14
                 horizontalAlignment: Text.AlignRight
                 text: "ZeroCool AI Professional"
                 color: "#718096"
                 font.pixelSize: 9
+            }
+            Button {
+                width: parent.width * .06
+                height: 32
+                anchors.verticalCenter: parent.verticalCenter
+                hoverEnabled: true
+                background: Rectangle {
+                    radius: 7
+                    color: parent.hovered ? "#fff0f1" : "#fff7f7"
+                    border.color: "#f2b9bd"
+                }
+                contentItem: Text {
+                    text: "종료"
+                    color: "#d92d36"
+                    font.pixelSize: 11
+                    font.weight: Font.DemiBold
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+                onClicked: backend.quitApplication()
             }
         }
     }

@@ -16,16 +16,20 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-from PySide6.QtCore import QObject, Property, QTimer, QUrl, Signal, Slot
+from PySide6.QtCore import QCoreApplication, QObject, Property, QTimer, QUrl, Signal, Slot
 from PySide6.QtGui import QGuiApplication, QIcon
 from PySide6.QtQml import QQmlApplicationEngine
 from PySide6.QtWidgets import QFileDialog, QMessageBox
 
 
-BASE = Path(__file__).resolve().parent
-ROOT = BASE.parent
+FROZEN = bool(getattr(sys, "frozen", False))
+RESOURCE_BASE = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
+BASE = RESOURCE_BASE
+ROOT = Path(sys.executable).resolve().parent if FROZEN else BASE.parent
 RESULTS_DIR = ROOT / "results"
+DEBUG_DIR = ROOT / "debug"
 RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+DEBUG_DIR.mkdir(parents=True, exist_ok=True)
 
 
 class LauncherBridge(QObject):
@@ -145,6 +149,10 @@ class LauncherBridge(QObject):
     def startDaily(self):
         self._start("all", "due")
 
+    @Slot(str, str, int)
+    def runTarget(self, mode, target, limit=0):
+        self._start(mode or "completion", target or "all", limit)
+
     @Slot()
     def stop(self):
         if not self._running:
@@ -177,6 +185,29 @@ class LauncherBridge(QObject):
     def openResults(self):
         target = self._last_output if self._last_output and self._last_output.exists() else RESULTS_DIR
         os.startfile(str(target))
+
+    @Slot()
+    def openResultsFolder(self):
+        os.startfile(str(RESULTS_DIR))
+
+    @Slot()
+    def openDebugFolder(self):
+        os.startfile(str(DEBUG_DIR))
+
+    @Slot()
+    def showLastError(self):
+        errors = [line for line in self._log.splitlines() if "ERROR" in line or "오류" in line]
+        self.toastRequested.emit(
+            "최근 오류 진단",
+            "\n".join(errors[-8:]) if errors else "현재 기록된 오류가 없습니다.",
+        )
+
+    @Slot()
+    def quitApplication(self):
+        if self._running:
+            self.toastRequested.emit("조회 진행 중", "먼저 조회 중지를 눌러 안전하게 작업을 종료해 주세요.")
+            return
+        QCoreApplication.quit()
 
     @Slot()
     def showSettings(self):
@@ -220,7 +251,7 @@ class LauncherBridge(QObject):
             self.toastRequested.emit("파일 분석 오류", str(exc))
         self.changed.emit()
 
-    def _start(self, mode: str, target: str):
+    def _start(self, mode: str, target: str, limit: int = 0):
         if self._running:
             return self.toastRequested.emit("실행 중", "현재 조회가 진행 중입니다.")
         if not self._file_path or not Path(self._file_path).exists():
@@ -235,15 +266,25 @@ class LauncherBridge(QObject):
             self._pending_followup = True
             mode = "completion"
         stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        self._last_output = RESULTS_DIR / f"{Path(self._file_path).stem}_교육수료조회_{stamp}.xlsx"
+        suffix = "_3명테스트" if limit else "_교육수료조회"
+        self._last_output = RESULTS_DIR / f"{Path(self._file_path).stem}{suffix}_{stamp}.xlsx"
         self._control_file = Path(os.environ.get("TEMP", str(BASE))) / f"zerocool_qt_stop_{os.getpid()}_{stamp}.txt"
         self._control_file.unlink(missing_ok=True)
-        cmd = [
-            sys.executable, str(BASE / "unified_checker.py"), self._file_path,
+        if FROZEN:
+            cmd = [
+                sys.executable, "--worker", self._file_path,
+            ]
+        else:
+            cmd = [
+                sys.executable, str(BASE / "unified_checker.py"), self._file_path,
+            ]
+        cmd += [
             "--regions", ",".join(regions), "--mode", mode, "--target", target,
             "--browser-mode", "background" if self._background else "normal",
             "--output", str(self._last_output), "--control-file", str(self._control_file),
         ]
+        if limit:
+            cmd += ["--limit", str(limit)]
         status_keys = {
             "수료": "completed", "미수료": "incomplete", "입교예정": "scheduled",
             "보류": "hold", "제외": "excluded", "조회오류": "error",
@@ -327,6 +368,13 @@ class LauncherBridge(QObject):
 
 
 def main() -> int:
+    if FROZEN and len(sys.argv) > 1 and sys.argv[1] == "--worker":
+        # Reuse the packaged runtime for the automation worker.  The end user
+        # sees one executable while the UI and Selenium process stay isolated.
+        sys.argv = [sys.argv[0], *sys.argv[2:]]
+        from unified_checker import main as worker_main
+        worker_main()
+        return 0
     os.environ.setdefault("QT_QUICK_CONTROLS_STYLE", "Basic")
     app = QGuiApplication(sys.argv)
     app.setApplicationName("ZeroCool AI Professional")
@@ -337,9 +385,9 @@ def main() -> int:
         bridge._refresh_file()
     engine = QQmlApplicationEngine()
     engine.rootContext().setContextProperty("backend", bridge)
-    asset_url = QUrl.fromLocalFile(str(BASE / "assets" / "fluent" / "png") + os.sep).toString()
+    asset_url = QUrl.fromLocalFile(str(RESOURCE_BASE / "assets" / "fluent" / "png") + os.sep).toString()
     engine.rootContext().setContextProperty("assetBaseUrl", asset_url)
-    engine.load(QUrl.fromLocalFile(str(BASE / "ui" / "Main.qml")))
+    engine.load(QUrl.fromLocalFile(str(RESOURCE_BASE / "ui" / "Main.qml")))
     if not engine.rootObjects():
         return 1
     return app.exec()

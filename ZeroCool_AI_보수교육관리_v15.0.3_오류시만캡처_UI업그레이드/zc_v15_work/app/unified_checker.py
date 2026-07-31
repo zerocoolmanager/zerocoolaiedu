@@ -1588,7 +1588,13 @@ def main():
     people=[p for p in all_people if selected(p)]
     people=people[:args.limit] if args.limit else people
     print(f'SELECTED|{len(people)}|{args.date_filter}:{args.status_filter}' if (args.date_filter!='all' or args.status_filter!='all') else f'SELECTED|{len(people)}|{args.target}',flush=True)
-    regions=[x.strip() for x in args.regions.split(',') if x.strip()]; root=Path(__file__).resolve().parent.parent; debug=root/'debug'; debug.mkdir(parents=True,exist_ok=True); ai_samples=[]
+    regions=[x.strip() for x in args.regions.split(',') if x.strip()]
+    # In the packaged release the worker lives under ``_internal`` while
+    # user-visible results/debug folders belong beside ZeroCool_AI.exe.
+    root=(Path(sys.executable).resolve().parent
+          if getattr(sys,'frozen',False)
+          else Path(__file__).resolve().parent.parent)
+    debug=root/'debug'; debug.mkdir(parents=True,exist_ok=True); ai_samples=[]
     if not people:
         write_result(inp,sn,hr,df,out)
         counts=summary_counts(df,all_people);print('SUMMARY|'+json.dumps(counts,ensure_ascii=False),flush=True);print('OUTPUT|'+str(out),flush=True);return
