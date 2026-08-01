@@ -6,6 +6,10 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import sqlite3
 import pandas as pd
+from launcher_ui import (
+    BG, BLUE, DANGER, FONT_KR, SURFACE, TEXT, TEXT_MUTED, WHITE,
+    apply_dashboard_styles, apply_windows_chrome, build_dashboard_ui,
+)
 
 BASE = Path(__file__).resolve().parent
 ROOT = BASE.parent
@@ -13,247 +17,23 @@ RESULTS_DIR = ROOT / 'results'
 DEBUG_DIR = ROOT / 'debug'
 RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 DEBUG_DIR.mkdir(parents=True, exist_ok=True)
-NAVY='#082845'; BG='#f6f8fb'; BLUE='#1265e8'; TEXT='#17324d'; PALE='#edf3fa'; WHITE='#ffffff'
-
-class RoundedButton(tk.Canvas):
-    def __init__(self, master, text, command=None, bg='#246fe5', fg='white', hover=None,
-                 radius=12, height=42, font=('맑은 고딕', 10, 'bold'), icon='', state='normal', **kwargs):
-        # ttk 위젯(Frame 등)은 -bg 옵션을 지원하지 않을 수 있으므로 안전하게 배경색을 결정한다.
-        try:
-            parent_bg = master.cget('background')
-        except Exception:
-            try:
-                parent_bg = master.winfo_toplevel().cget('background')
-            except Exception:
-                parent_bg = BG
-        super().__init__(master, height=height, bg=parent_bg,
-                         highlightthickness=0, bd=0, cursor='hand2', **kwargs)
-        self._text=text; self._icon=icon; self._command=command; self._bg=bg; self._fg=fg
-        self._hover=hover or bg; self._radius=radius; self._font=font; self._state=state
-        self.bind('<Configure>', lambda e:self._draw())
-        self.bind('<Enter>', lambda e:self._paint(self._hover) if self._state!='disabled' else None)
-        self.bind('<Leave>', lambda e:self._paint(self._bg) if self._state!='disabled' else None)
-        self.bind('<Button-1>', lambda e:self._click())
-        self._draw()
-    def _round_rect(self,x1,y1,x2,y2,r,fill):
-        pts=[x1+r,y1,x2-r,y1,x2,y1,x2,y1+r,x2,y2-r,x2,y2,x2-r,y2,x1+r,y2,x1,y2,x1,y2-r,x1,y1+r,x1,y1]
-        return self.create_polygon(pts,smooth=True,splinesteps=24,fill=fill,outline='')
-    def _draw(self):
-        self.delete('all'); w=max(self.winfo_width(),80); h=max(self.winfo_height(),30)
-        color='#cfd8e3' if self._state=='disabled' else self._bg
-        self._round_rect(2,2,w-2,h-2,min(self._radius,h//2-2),color)
-        label=(self._icon+'  ' if self._icon else '')+self._text
-        self.create_text(w/2,h/2,text=label,fill='#7d8995' if self._state=='disabled' else self._fg,font=self._font)
-    def _paint(self,color):
-        if self._state!='disabled': self.itemconfigure(1,fill=color)
-    def _click(self):
-        if self._state!='disabled' and self._command: self._command()
-    def configure(self, cnf=None, **kw):
-        if 'state' in kw: self._state=kw.pop('state')
-        if 'text' in kw: self._text=kw.pop('text')
-        super().configure(cnf or {}, **kw); self._draw()
-    config=configure
-
-class StatusCard(tk.Canvas):
-    def __init__(self, master, title, variable, accent, command=None, icon='●'):
-        super().__init__(master,height=72,bg=BG,highlightthickness=0,bd=0,cursor='hand2')
-        self.title=title; self.variable=variable; self.accent=accent; self.command=command; self.icon=icon
-        self.bind('<Configure>',lambda e:self.draw())
-        self.bind('<Button-1>',lambda e:self.command() if self.command else None)
-        self.bind('<Enter>',lambda e:self.configure(cursor='hand2'))
-        variable.trace_add('write',lambda *a:self.draw())
-        self.draw()
-    def draw(self):
-        self.delete('all'); w=max(self.winfo_width(),80); h=max(self.winfo_height(),60)
-        # subtle shadow
-        self.create_oval(6,h-12,w-6,h-2,fill='#dce3eb',outline='')
-        pts=[14,3,w-14,3,w-3,14,w-3,h-10,w-14,h-3,14,h-3,3,h-14,3,14]
-        self.create_polygon(pts,smooth=True,splinesteps=24,fill='white',outline='#d7e0ea')
-        self.create_oval(13,14,27,28,fill=self.accent,outline='')
-        self.create_text(20,21,text=self.icon,fill='white',font=('맑은 고딕',7,'bold'))
-        self.create_text(34,20,text=self.title,anchor='w',fill='#536b82',font=('맑은 고딕',8,'bold'))
-        self.create_text(14,49,text=self.variable.get(),anchor='w',fill='#102b45',font=('맑은 고딕',18,'bold'))
-
-
-
-class SelectableButton(tk.Button):
-    def __init__(self, master, text, variable, command=None, icon='', selected_bg='#e8f1ff', selected_fg=BLUE, selected_border=BLUE,
-                 normal_bg='#f1f3f5', normal_fg='#6b7785', normal_border='#d8dee6', **kwargs):
-        self.variable=variable; self.user_command=command; self.icon=icon; self.base_text=text
-        self.selected_bg=selected_bg; self.selected_fg=selected_fg; self.selected_border=selected_border
-        self.normal_bg=normal_bg; self.normal_fg=normal_fg; self.normal_border=normal_border
-        super().__init__(master,text=text,command=self._toggle,font=('맑은 고딕',10,'bold'),relief='flat',bd=0,
-                         padx=10,pady=9,cursor='hand2',anchor='center',**kwargs)
-        self.variable.trace_add('write',lambda *a:self._sync())
-        self._sync()
-    def _toggle(self):
-        self.variable.set(not self.variable.get())
-        if self.user_command: self.user_command()
-    def _sync(self):
-        selected=bool(self.variable.get())
-        label=(f'{self.icon}  ' if self.icon else '')+self.base_text+('  ✓' if selected else '')
-        self.configure(text=label,
-                       bg=self.selected_bg if selected else self.normal_bg,
-                       fg=self.selected_fg if selected else self.normal_fg,
-                       activebackground=self.selected_bg if selected else '#e6ebf0',
-                       activeforeground=self.selected_fg if selected else self.normal_fg,
-                       highlightbackground=self.selected_border if selected else self.normal_border,
-                       highlightcolor=self.selected_border if selected else self.normal_border,
-                       highlightthickness=1)
-
-
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title('ZeroCool AI · 서울·경기·인천 보수교육 관리 v15.0.3')
-        self.geometry('1180x780'); self.minsize(1020,700)
+        self.geometry('1280x820'); self.minsize(1080,720)
         self.configure(bg=BG)
         self.q=queue.Queue(); self.proc=None; self.output=''; self.pending_followup=None; self.vars={}; self.date_filter=tk.StringVar(value='due'); self.status_vars={k:tk.BooleanVar(value=True) for k in ('completed','incomplete','scheduled','hold','excluded','error')}; self.status_all=tk.BooleanVar(value=True); self.last_error=''; self.rows=[]; self.current_filter='전체'; self.control_file=None; self.stop_requested=False; self.last_run=None; self.run_started_at=None; self.error_count=0; self.region_metrics={}; self.before_snapshot={}; self.last_changes=[]; self.last_elapsed=0; self.selected_run_total=0; self.query_vars={'completion':tk.BooleanVar(value=True),'reservation':tk.BooleanVar(value=True)}; self.query_all=tk.BooleanVar(value=True)
-        self._styles(); self._ui(); self.after(100,self._poll)
+        self._styles(); self._ui(); self.after(0,self._apply_windows_chrome); self.after(100,self._poll)
+
+    def _apply_windows_chrome(self):
+        apply_windows_chrome(self)
 
     def _styles(self):
-        s=ttk.Style(self); s.theme_use('clam')
-        s.configure('Main.TFrame',background=BG); s.configure('White.TFrame',background=WHITE)
-        s.configure('Panel.TLabelframe',background=WHITE,bordercolor='#cfdae6')
-        s.configure('Panel.TLabelframe.Label',background=WHITE,foreground=TEXT,font=('맑은 고딕',10,'bold'))
-        s.configure('ZC.TButton',font=('맑은 고딕',10,'bold'),padding=(10,7),background=PALE,foreground=TEXT,borderwidth=0)
-        s.map('ZC.TButton',background=[('active','#dce9f7')])
-        s.configure('Primary.TButton',font=('맑은 고딕',10,'bold'),padding=(10,8),background=BLUE,foreground='white',borderwidth=0)
-        s.map('Primary.TButton',background=[('active','#155dcc')])
-        s.configure('Filter.TRadiobutton',background=WHITE,foreground=TEXT,font=('맑은 고딕',10,'bold'),padding=(8,6))
-        s.map('Filter.TRadiobutton',background=[('selected','#dce9f7')],foreground=[('selected',BLUE)])
-        s.configure('Filter.TCheckbutton',background=WHITE,foreground=TEXT,font=('맑은 고딕',10,'bold'),padding=(8,6))
-        s.configure('Danger.TButton',font=('맑은 고딕',10,'bold'),padding=(10,7),background='#d9414b',foreground='white')
-        s.configure('Horizontal.TProgressbar',troughcolor='#d7dce2',background=BLUE,bordercolor='#d7dce2',lightcolor=BLUE,darkcolor=BLUE,thickness=10)
-        s.configure('TNotebook',background=WHITE,borderwidth=0)
-        s.configure('TNotebook.Tab',font=('맑은 고딕',9,'bold'),padding=(14,7),background='#eef2f6',foreground='#53687c')
-        s.map('TNotebook.Tab',background=[('selected',WHITE)],foreground=[('selected',TEXT)])
-        s.configure('Treeview',font=('맑은 고딕',10),rowheight=29,background='white',fieldbackground='white')
-        s.configure('Treeview.Heading',font=('맑은 고딕',10,'bold'),background='#e9f0f7',foreground=TEXT)
+        apply_dashboard_styles(self)
 
     def _ui(self):
-        header=tk.Frame(self,bg=NAVY,height=82); header.pack(fill='x'); header.pack_propagate(False)
-        tk.Label(header,text='ZEROCOOL AI',bg=NAVY,fg='#65b9ff',font=('맑은 고딕',9,'bold')).place(x=30,y=18)
-        tk.Label(header,text='서울·경기·인천 보수교육 관리',bg=NAVY,fg='white',font=('맑은 고딕',19,'bold')).place(x=30,y=35)
-        self.header_status=tk.StringVar(value='조회 파일을 선택해 주세요.')
-        tk.Label(header,textvariable=self.header_status,bg=NAVY,fg='white',font=('맑은 고딕',9)).place(relx=.98,y=33,anchor='e')
-
-        wrap=ttk.Frame(self,style='Main.TFrame',padding=12); wrap.pack(fill='both',expand=True)
-        filebox=ttk.LabelFrame(wrap,text='보수교육 명단 및 조회기관',style='Panel.TLabelframe',padding=12); filebox.pack(fill='x')
-        self.file=tk.StringVar(); ttk.Entry(filebox,textvariable=self.file,font=('맑은 고딕',10)).grid(row=0,column=0,sticky='ew',padx=(0,10),ipady=7)
-        ttk.Button(filebox,text='파일 선택',style='Primary.TButton',command=self.pick).grid(row=0,column=1,padx=4)
-        ttk.Button(filebox,text='현황 새로고침',style='ZC.TButton',command=self.refresh_file).grid(row=0,column=2,padx=4)
-        filebox.columnconfigure(0,weight=1)
-        opt=ttk.Frame(filebox,style='White.TFrame'); opt.grid(row=1,column=0,columnspan=3,sticky='ew',pady=(9,0))
-        self.seoul=tk.BooleanVar(value=True); self.gg=tk.BooleanVar(value=True); self.incheon=tk.BooleanVar(value=True)
-        self.background_mode=tk.BooleanVar(value=True); self.ai_priority=tk.BooleanVar(value=False)
-        ttk.Checkbutton(opt,text='서울',variable=self.seoul).pack(side='left',padx=(0,18))
-        ttk.Checkbutton(opt,text='경기',variable=self.gg).pack(side='left',padx=(0,12))
-        ttk.Checkbutton(opt,text='인천',variable=self.incheon).pack(side='left',padx=(0,18))
-        ttk.Checkbutton(opt,text='백그라운드 모드(작은 창)',variable=self.background_mode).pack(side='left',padx=(4,12))
-        ttk.Label(opt,text='※ 조회창은 주 모니터 좌측 상단에 작게 표시됩니다.',background=WHITE,foreground='#66798d').pack(side='right')
-
-        self.alert_var=tk.StringVar(value='ⓘ 파일을 선택하면 확인이 필요한 항목을 자동으로 알려드립니다.')
-        self.alert_bar=tk.Label(wrap,textvariable=self.alert_var,bg='#eaf3ff',fg='#1c5fa8',font=('맑은 고딕',9,'bold'),anchor='w',padx=14,pady=9)
-        self.alert_bar.pack(fill='x',pady=(8,4))
-
-        cards=ttk.Frame(wrap,style='Main.TFrame'); cards.pack(fill='x',pady=(3,7))
-        specs=[('전체','#2d76e8','Σ'),('교육수료','#22a769','✓'),('입교예정','#ee9b00','◷'),('미수료','#7657ef','!'),('보류','#9a6b45','Ⅱ'),('제외','#7a8794','×'),('조회오류','#d9414b','!')]
-        for i,(k,c,ico) in enumerate(specs):
-            v=tk.StringVar(value='0'); self.vars[k]=v
-            card=StatusCard(cards,k,v,c,command=lambda key=k:self.apply_status_filter(key),icon=ico)
-            card.grid(row=0,column=i,sticky='nsew',padx=3,pady=1)
-            cards.columnconfigure(i,weight=1,uniform='status')
-
-        content=ttk.Panedwindow(wrap,orient='horizontal'); content.pack(fill='both',expand=True)
-        left_panel=ttk.LabelFrame(content,text='필요한 대상만 선택 조회',style='Panel.TLabelframe',padding=6)
-        right=ttk.LabelFrame(content,text='조회 진행 현황',style='Panel.TLabelframe',padding=12)
-        content.add(left_panel,weight=2); content.add(right,weight=5)
-
-        # 왼쪽 기능 버튼 영역은 창 높이가 작아도 사용할 수 있도록 세로 스크롤 적용
-        left_canvas=tk.Canvas(left_panel,bg=WHITE,highlightthickness=0,width=315)
-        left_scroll=ttk.Scrollbar(left_panel,orient='vertical',command=left_canvas.yview)
-        left_canvas.configure(yscrollcommand=left_scroll.set)
-        left_scroll.pack(side='right',fill='y')
-        left_canvas.pack(side='left',fill='both',expand=True)
-        left=ttk.Frame(left_canvas,style='White.TFrame',padding=(5,3))
-        left_window=left_canvas.create_window((0,0),window=left,anchor='nw')
-        left.bind('<Configure>',lambda e:left_canvas.configure(scrollregion=left_canvas.bbox('all')))
-        left_canvas.bind('<Configure>',lambda e:left_canvas.itemconfigure(left_window,width=e.width))
-        def _left_wheel(e):
-            left_canvas.yview_scroll(int(-1*(e.delta/120)), 'units')
-        left_canvas.bind('<Enter>',lambda e:left_canvas.bind_all('<MouseWheel>',_left_wheel))
-        left_canvas.bind('<Leave>',lambda e:left_canvas.unbind_all('<MouseWheel>'))
-
-        # v11: 날짜는 단일 선택, 상태는 중복 선택으로 조합한다.
-        r=0
-        tk.Label(left,text='조회 조건',bg=WHITE,fg=TEXT,font=('맑은 고딕',11,'bold')).grid(row=r,column=0,columnspan=2,sticky='w',pady=(4,8)); r+=1
-
-        date_box=tk.LabelFrame(left,text=' 날짜 범위 ',bg=WHITE,fg='#60758b',font=('맑은 고딕',9,'bold'),bd=1,relief='solid',highlightthickness=0)
-        date_box.grid(row=r,column=0,columnspan=2,sticky='ew',padx=3,pady=3); r+=1
-        ttk.Radiobutton(date_box,text='전체 날짜',value='all',variable=self.date_filter,style='Filter.TRadiobutton',command=self.update_target_preview).pack(side='left',fill='x',expand=True,padx=4,pady=4)
-        ttk.Radiobutton(date_box,text='오늘까지',value='due',variable=self.date_filter,style='Filter.TRadiobutton',command=self.update_target_preview).pack(side='left',fill='x',expand=True,padx=4,pady=4)
-
-        status_box=tk.LabelFrame(left,text=' 2  상태 범위 · 복수 선택 가능 ',bg=WHITE,fg='#246fe5',font=('맑은 고딕',9,'bold'),bd=1,relief='solid',highlightthickness=0)
-        status_box.grid(row=r,column=0,columnspan=2,sticky='ew',padx=3,pady=(7,3)); r+=1
-        status_head=tk.Frame(status_box,bg=WHITE)
-        status_head.grid(row=0,column=0,columnspan=2,sticky='ew',padx=5,pady=(5,3))
-        tk.Label(status_head,text='조회할 상태를 선택하세요',bg=WHITE,fg='#60758b',font=('맑은 고딕',8)).pack(side='left')
-        tk.Button(status_head,text='전체 선택',command=self.toggle_all_statuses_button,font=('맑은 고딕',8,'bold'),
-                  bg='#eef2f6',fg='#526579',activebackground='#dce9f7',activeforeground=BLUE,relief='flat',bd=0,padx=9,pady=4,cursor='hand2').pack(side='right')
-        status_items=[('수료','completed','●','#18a66a'),('미수료','incomplete','×','#e84d5b'),('입교예정','scheduled','▣','#246fe5'),('보류','hold','◷','#e7a317'),('제외','excluded','−','#7657ef'),('조회오류','error','△','#7d8793')]
-        for i,(label,value,icon,color) in enumerate(status_items):
-            SelectableButton(status_box,text=label,variable=self.status_vars[value],icon=icon,command=self.on_status_changed,
-                             selected_bg='#eef8f3' if value=='completed' else '#edf4ff',selected_fg=color,selected_border=color).grid(row=1+i//2,column=i%2,sticky='ew',padx=5,pady=4)
-        status_box.columnconfigure(0,weight=1); status_box.columnconfigure(1,weight=1)
-
-        query_box=tk.LabelFrame(left,text=' 3  조회 항목 · 복수 선택 가능 ',bg=WHITE,fg='#246fe5',font=('맑은 고딕',9,'bold'),bd=1,relief='solid',highlightthickness=0)
-        query_box.grid(row=r,column=0,columnspan=2,sticky='ew',padx=3,pady=(7,3)); r+=1
-        query_head=tk.Frame(query_box,bg=WHITE); query_head.grid(row=0,column=0,columnspan=2,sticky='ew',padx=5,pady=(5,3))
-        tk.Label(query_head,text='하나만 또는 둘 다 선택할 수 있습니다',bg=WHITE,fg='#60758b',font=('맑은 고딕',8)).pack(side='left')
-        tk.Button(query_head,text='전체 선택',command=self.toggle_all_queries_button,font=('맑은 고딕',8,'bold'),
-                  bg='#eef2f6',fg='#526579',activebackground='#dce9f7',activeforeground=BLUE,relief='flat',bd=0,padx=9,pady=4,cursor='hand2').pack(side='right')
-        SelectableButton(query_box,text='수료조회',variable=self.query_vars['completion'],icon='🎓',command=self.on_query_changed,
-                         selected_bg='#eef8f3',selected_fg='#15955f',selected_border='#18a66a').grid(row=1,column=0,sticky='ew',padx=5,pady=(4,6))
-        SelectableButton(query_box,text='예약조회',variable=self.query_vars['reservation'],icon='▣',command=self.on_query_changed,
-                         selected_bg='#edf4ff',selected_fg=BLUE,selected_border=BLUE).grid(row=1,column=1,sticky='ew',padx=5,pady=(4,6))
-        query_box.columnconfigure(0,weight=1); query_box.columnconfigure(1,weight=1)
-        self.query_note=tk.StringVar(value='둘 다 선택하면 수료조회 → 예약조회 순서로 자동 진행됩니다.')
-        tk.Label(query_box,textvariable=self.query_note,bg='#eef8f3',fg='#168057',font=('맑은 고딕',8,'bold'),anchor='w',padx=8,pady=6).grid(row=2,column=0,columnspan=2,sticky='ew',padx=5,pady=(0,6))
-
-        # v13.1: 자주 쓰는 기능만 노출하고 나머지는 더보기로 이동
-        self.target_preview=tk.StringVar(value='조회 조건을 계산합니다.')
-        preview=tk.Label(left,textvariable=self.target_preview,bg='#eef5fc',fg=TEXT,font=('맑은 고딕',9,'bold'),justify='left',anchor='w',padx=10,pady=10,wraplength=280)
-        preview.grid(row=r,column=0,columnspan=2,sticky='ew',padx=3,pady=(8,7)); r+=1
-
-        RoundedButton(left,text='선택 조건으로 조회',icon='▶',command=self.run_filtered,bg=BLUE,hover='#155dcc',height=48,radius=14).grid(row=r,column=0,columnspan=2,sticky='ew',padx=3,pady=6); r+=1
-
-        quick=tk.Frame(left,bg=WHITE); quick.grid(row=r,column=0,columnspan=2,sticky='ew',padx=3,pady=(5,2)); r+=1
-        RoundedButton(quick,text='오늘 업무',icon='☀',command=self.one_click_run,bg='#16a36a',hover='#118657',height=40).pack(side='left',fill='x',expand=True,padx=(0,3))
-        RoundedButton(quick,text='조회 결과 보기',icon='▤',command=self.open_result,bg='#6d43cf',hover='#5834b5',height=40).pack(side='left',fill='x',expand=True,padx=(3,0))
-
-        RoundedButton(left,text='기타 기능',icon='⋯',command=self.show_more_actions,bg='#e6edf5',fg=TEXT,hover='#d8e4f0',height=38).grid(row=r,column=0,columnspan=2,sticky='ew',padx=3,pady=(6,3)); r+=1
-        self.update_note=tk.StringVar(value='v15.0.3 · 정상 화면 캡처 제거 · 오류 발생 시에만 HTML/PNG 저장')
-        tk.Label(left,textvariable=self.update_note,bg=WHITE,fg='#60758b',font=('맑은 고딕',8),wraplength=280,justify='left').grid(row=r,column=0,columnspan=2,sticky='ew',padx=3,pady=(6,8)); r+=1
-        ttk.Separator(left).grid(row=r,column=0,columnspan=2,sticky='ew',pady=5);r+=1
-        left.columnconfigure(0,weight=1); left.columnconfigure(1,weight=1)
-        self.stop_btn=RoundedButton(left,text='조회 중지',icon='■',command=self.stop,bg='#d9414b',hover='#bd3039',height=38); self.stop_btn.grid(row=r,column=0,columnspan=2,sticky='ew',padx=3,pady=(4,3))
-        self.resume_btn=RoundedButton(left,text='중지된 조회 재개',icon='▶',command=self.resume_run,bg=BLUE,hover='#155dcc',height=38,state='disabled'); self.resume_btn.grid(row=r+1,column=0,sticky='ew',padx=3,pady=3)
-        self.reset_btn=RoundedButton(left,text='새 조회 준비',icon='↺',command=self.reset_run_state,bg='#e6edf5',fg=TEXT,hover='#d8e4f0',height=38); self.reset_btn.grid(row=r+1,column=1,sticky='ew',padx=3,pady=3)
-
-        self.ptext=tk.StringVar(value='대기 중'); ttk.Label(right,textvariable=self.ptext,background=WHITE,foreground='#57708a').pack(anchor='w')
-        self.pb=ttk.Progressbar(right,maximum=100); self.pb.pack(fill='x',pady=(6,10))
-        tabs=ttk.Notebook(right); tabs.pack(fill='both',expand=True)
-        logf=ttk.Frame(tabs); resultf=ttk.Frame(tabs); tabs.add(logf,text='실시간 로그'); tabs.add(resultf,text='조회 결과')
-        self.log=tk.Text(logf,font=('맑은 고딕',9),bg='#0e2031',fg='#f4f8fb',insertbackground='white',wrap='word',relief='flat',padx=10,pady=10); self.log.pack(fill='both',expand=True)
-        filterbar=ttk.Frame(resultf); filterbar.pack(fill='x',pady=(0,6))
-        ttk.Label(filterbar,text='검색').pack(side='left',padx=(0,6))
-        self.search_var=tk.StringVar(); ent=ttk.Entry(filterbar,textvariable=self.search_var,width=24); ent.pack(side='left'); ent.bind('<KeyRelease>',lambda e:self.render_rows())
-        self.filter_label=tk.StringVar(value='전체 명단'); ttk.Label(filterbar,textvariable=self.filter_label).pack(side='right')
-        cols=('이름','수료여부','수료일','구분','교육시청일(예정일)','사이트','비고'); self.tree=ttk.Treeview(resultf,columns=cols,show='headings')
-        widths={'이름':95,'수료여부':85,'수료일':210,'구분':105,'교육시청일(예정일)':125,'사이트':75,'비고':140}
-        for c in cols:self.tree.heading(c,text=c);self.tree.column(c,width=widths[c],anchor='center')
-        self.tree.pack(fill='both',expand=True)
+        build_dashboard_ui(self)
 
     def run_reservation_separate(self, target='all'):
         msg=(
@@ -302,6 +82,64 @@ class App(tk.Tk):
             '· 예약이 없으면 기존 교육시청일 유지\n'
             '· 기존 수료조회, 대시보드, 변경로그 유지'
         )
+
+    def show_help(self):
+        messagebox.showinfo(
+            'ZeroCool AI 도움말',
+            '1. 조회할 Excel 파일을 선택합니다.\n'
+            '2. 지역, 상태, 조회 항목을 선택합니다.\n'
+            '3. 선택 조건으로 조회 또는 오늘 업무를 실행합니다.\n'
+            '4. 실시간 로그와 조회 결과 탭에서 진행 상황을 확인합니다.\n\n'
+            '추가 기능과 재조회 도구는 설정 메뉴에서 사용할 수 있습니다.'
+        )
+
+    def show_dashboard(self):
+        if hasattr(self, 'main_tabs'):
+            self.main_tabs.select(self.log_frame)
+
+    def focus_query_controls(self):
+        if hasattr(self, 'file_entry'):
+            self.file_entry.focus_set()
+        self.update_target_preview()
+
+    def show_results_view(self):
+        if hasattr(self, 'main_tabs'):
+            self.main_tabs.select(self.result_frame)
+        self.render_rows()
+
+    def show_log_view(self):
+        if hasattr(self, 'main_tabs'):
+            self.main_tabs.select(self.log_frame)
+        if hasattr(self, 'log'):
+            self.log.focus_set()
+
+    def save_log(self):
+        content=self.log.get('1.0','end-1c').strip() if hasattr(self,'log') else ''
+        if not content:
+            return messagebox.showinfo('로그 저장','저장할 로그가 없습니다.')
+        initial=f"zerocool_log_{datetime.now():%Y%m%d_%H%M%S}.txt"
+        path=filedialog.asksaveasfilename(
+            title='실시간 로그 저장',
+            defaultextension='.txt',
+            initialfile=initial,
+            filetypes=[('텍스트 파일','*.txt'),('모든 파일','*.*')],
+        )
+        if path:
+            Path(path).write_text(content,encoding='utf-8')
+            messagebox.showinfo('로그 저장',f'로그를 저장했습니다.\n{path}')
+
+    def clear_log(self):
+        if not hasattr(self,'log') or not self.log.get('1.0','end-1c').strip():
+            return
+        if messagebox.askyesno('로그 지우기','현재 실시간 로그를 모두 지울까요?'):
+            self.log.delete('1.0','end')
+
+    def request_exit(self):
+        if self.proc and not messagebox.askyesno(
+            '프로그램 종료','조회가 진행 중입니다. 그래도 종료할까요?'
+        ):
+            return
+        self.destroy()
 
     def pick(self):
         p=filedialog.askopenfilename(filetypes=[('Excel 파일','*.xls *.xlsx')])
@@ -640,7 +478,10 @@ class App(tk.Tk):
         txt=tk.Text(win,font=('맑은 고딕',10),padx=16,pady=16,wrap='word'); txt.pack(fill='both',expand=True)
         txt.insert('1.0','\n'.join(lines)); txt.configure(state='disabled')
 
-    def _log(self,s):self.log.insert('end',s+'\n');self.log.see('end')
+    def _log(self,s):
+        self.log.insert('end',s+'\n')
+        if not hasattr(self,'auto_scroll') or self.auto_scroll.get():
+            self.log.see('end')
     def stop(self):
         if not self.proc:
             return messagebox.showinfo('조회 중지','현재 진행 중인 조회가 없습니다.')
